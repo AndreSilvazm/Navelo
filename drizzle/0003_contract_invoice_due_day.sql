@@ -1,0 +1,2 @@
+ALTER TABLE "contracts" ADD COLUMN "invoice_due_day" smallint;--> statement-breakpoint
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_invoice_due_day_range" CHECK ("contracts"."invoice_due_day" between 1 and 31);

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -16 270 60" role="img" aria-labelledby="title">
+  <title id="title">Navelo</title>
+  <g fill="none" stroke="#385BFF" stroke-linejoin="round" stroke-width="9">
+    <path d="M4.5 44V25a20.5 20.5 0 0 1 41 0V44"/>
+    <circle cx="76.5" cy="22" r="17.5"/>
+    <path d="M98.5 0V44"/>
+    <path d="M108 4.5 128.5 38.5 149 4.5" stroke-linecap="round"/>
+    <path d="M160 22H195A17.5 17.5 0 1 0 189.9 34.4"/>
+    <path d="M211 -11.5V39.5" stroke-linecap="round"/>
+    <ellipse cx="245" cy="22" rx="19.5" ry="17.5"/>
+  </g>
+</svg>
