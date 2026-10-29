@@ -8,12 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx scripts/migrate.mts",
     "db:studio": "drizzle-kit studio",
     "company:create": "tsx --conditions=react-server scripts/create-company.mts",
     "seed:dev": "tsx --conditions=react-server scripts/seed-dev.mts",
     "files:migrate": "tsx --conditions=react-server scripts/migrate-files-to-storage.mts",
-    "db:roles": "tsx scripts/db-roles.mts"
+    "db:roles": "tsx scripts/db-roles.mts",
+    "env:check": "tsx scripts/env-check.mts",
+    "predev": "tsx scripts/env-check.mts --dev",
+    "seed:staging": "tsx --conditions=react-server scripts/seed-staging.mts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

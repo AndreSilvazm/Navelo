@@ -1,7 +1,8 @@
 /**
  * Cria (ou atualiza) os usuários do banco de um ambiente.
  *
- *   DATABASE_MIGRATE_URL=<url do dono> NAVELO_APP_PASSWORD=... NAVELO_ADMIN_PASSWORD=... npm run db:roles
+ *   npm run db:roles      (usa o bloco ativo do .env.local: DATABASE_MIGRATE_URL, NAVELO_APP_PASSWORD
+ *                          e NAVELO_ADMIN_PASSWORD)
  *
  * - navelo_app:   usuário da aplicação. Sujeito ao RLS, sem DDL, sem acesso às tabelas de
  *                 sistema (sessions, rate_limits, password_resets).
@@ -11,7 +12,30 @@
  * As permissões de cada tabela são dadas pela migração de políticas. Este script só cria os
  * papéis e define as senhas, e pode ser repetido para trocar a senha.
  */
+import { createInterface } from "node:readline/promises"
 import postgres from "postgres"
+import { LABEL, blockingProblems, loadActiveEnv, projectOf, readActiveEnv } from "./lib/active-env"
+
+const ambiente = readActiveEnv()
+const travas = blockingProblems(ambiente)
+if (travas.length > 0) {
+  for (const t of travas) console.error(`✗ ${t}`)
+  process.exit(1)
+}
+loadActiveEnv()
+const alvo = projectOf(process.env.DATABASE_MIGRATE_URL)
+console.log(`Ambiente: ${LABEL[ambiente.appEnv!]} — projeto ${alvo?.ref}`)
+// trocar a senha dos usuários do banco de produção não é rotina: pede confirmação digitada
+if (ambiente.appEnv === "production") {
+  if (!process.stdin.isTTY) throw new Error("Produção exige terminal interativo para confirmar.")
+  const leitor = createInterface({ input: process.stdin, output: process.stdout })
+  const resposta = (await leitor.question('Isto cria/atualiza os usuários do banco de PRODUÇÃO. Digite "criar usuarios em producao": ')).trim().toLowerCase()
+  leitor.close()
+  if (resposta !== "criar usuarios em producao") {
+    console.log("Cancelado.")
+    process.exit(0)
+  }
+}
 
 const ownerUrl = process.env.DATABASE_MIGRATE_URL ?? process.env.DATABASE_URL
 const appPassword = process.env.NAVELO_APP_PASSWORD

@@ -31,15 +31,31 @@ npm run dev                  # http://localhost:3000
 
 Nunca versione o `.env.local`.
 
+## Ambientes e migrações
+
+Todas as chaves ficam em **um arquivo só**, o `.env.local` (nunca vai para o git), com três blocos: **LOCAL**, **STAGING** e **PRODUÇÃO**. **Só um bloco fica descomentado de cada vez.** Para trocar de ambiente, comente o bloco ligado e descomente o outro.
+
+| Comando | O que faz |
+|---|---|
+| `npm run env:check` | mostra qual ambiente está ligado e o projeto do banco |
+| `npm run db:migrate` | aplica as migrações no ambiente ligado: mostra alvo e pendências e pede confirmação |
+| `npm run db:migrate -- --dry` | só mostra, não aplica |
+| `npm run db:roles` | cria os usuários `navelo_app` e `navelo_admin` do ambiente ligado |
+
+Travas: com dois blocos ligados, ou sem `APP_ENV`, a migração e o `npm run dev` recusam. O `npm run dev` também recusa subir com a PRODUÇÃO ligada. Em produção a migração exige digitar `aplicar em producao`. Ordem segura: local, staging, produção.
+
+**Tabela nova precisa de permissão:** `navelo_app` e `navelo_admin` só acessam o que a migração `0021` liberou. Toda migração que cria tabela deve incluir, no mesmo SQL, `enable/force row level security`, as políticas e os `GRANT`.
+
 ## Scripts
 
 | Comando | O que faz |
 |---|---|
 | `npm run dev` / `build` / `start` | Servidor de desenvolvimento, build e produção |
 | `npm run lint` | ESLint |
-| `npm run db:generate` / `db:migrate` / `db:studio` | Migrações e painel do banco (Drizzle) |
+| `npm run db:generate` / `db:studio` | Gera migração a partir do schema / painel do banco (Drizzle) |
 | `npm run company:create` | Cria uma empresa e o seu proprietário |
 | `npm run seed:dev` | Popula dados de desenvolvimento |
+| `npm run seed:staging -- --owner-email <e-mail>` | Cria no STAGING uma empresa de teste e o convite do proprietário (recusa qualquer outro ambiente) |
 
 ## Documentos legais
 
