@@ -22,6 +22,8 @@ export type ChecklistItemDTO = {
 export type CollaboratorDetailData = {
   id: string
   status: CollaboratorStatus
+  /** quem está vendo é o próprio colaborador (agente que também presta serviço) */
+  isSelf: boolean
   name: string
   email: string
   jobTitle: string | null
@@ -46,6 +48,17 @@ export type CollaboratorDetailData = {
   bankAgency: string | null
   bankAccount: string | null
   bankAccountType: "checking" | "savings" | null
+  /** troca de conta esperando decisão do corporativo */
+  pendingBankChange: {
+    id: string
+    bankCode: string
+    bankName: string
+    bankAgency: string
+    bankAccount: string
+    bankAccountType: "checking" | "savings"
+    pixKey: string | null
+    createdAt: string
+  } | null
   pixKey: string | null
   invitedAt: string | null
   invitedBy: string | null

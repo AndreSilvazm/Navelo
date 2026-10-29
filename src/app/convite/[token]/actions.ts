@@ -1,14 +1,15 @@
 "use server"
 
 import { redirect } from "next/navigation"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { companies, invitations, memberships, users } from "@/db/schema"
 import { LEGAL_VERSION } from "@/lib/legal"
 import { joinAsCollaborator } from "@/lib/collaborator-join"
-import { MIN_PASSWORD_LENGTH, hashPassword, verifyPassword } from "@/lib/auth/password"
+import { hashPassword, validatePassword, verifyPassword } from "@/lib/auth/password"
 import { createSession, homeFor } from "@/lib/auth/session"
-import { hashToken, normalizeEmail } from "@/lib/auth/tokens"
+import { hashToken, legacyHashToken, normalizeEmail } from "@/lib/auth/tokens"
+import { clientIp, consumeRateLimit, minutesLabel } from "@/lib/rate-limit"
 import { FULL_NAME_ERROR, isFullName } from "@/lib/auth/validation"
 
 export type FormState = { error?: string } | undefined
@@ -24,6 +25,15 @@ export async function acceptInvitation(
   const confirm = String(formData.get("confirm") ?? "")
   const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ")
 
+  const ip = await clientIp()
+  for (const [key, limit, window] of [
+    [`convite:ip:${ip}`, 20, 15 * 60],
+    [`convite:token:${hashToken(token)}`, 8, 15 * 60],
+  ] as const) {
+    const { ok, retryAfterSeconds } = await consumeRateLimit(key, limit, window)
+    if (!ok) return { error: `Muitas tentativas. Tente de novo em ${minutesLabel(retryAfterSeconds)}.` }
+  }
+
   let result: { userId: string; membershipId: string; companyId: string; role: Parameters<typeof homeFor>[0] }
 
   try {
@@ -33,7 +43,8 @@ export async function acceptInvitation(
         .select({ invitation: invitations, companyStatus: companies.status })
         .from(invitations)
         .innerJoin(companies, eq(companies.id, invitations.companyId))
-        .where(eq(invitations.tokenHash, hashToken(token)))
+        // o formato antigo (sha256) ainda vale para convites criados antes do AUTH_SECRET
+        .where(inArray(invitations.tokenHash, [hashToken(token), legacyHashToken(token)]))
         .for("update", { of: invitations })
         .limit(1)
 
@@ -65,9 +76,9 @@ export async function acceptInvitation(
         if (needsTerms) await tx.update(users).set(terms).where(eq(users.id, existing.id))
       } else {
         if (!isFullName(name)) throw new InviteError(FULL_NAME_ERROR)
-        if (password.length < MIN_PASSWORD_LENGTH)
-          throw new InviteError(`A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`)
         if (password !== confirm) throw new InviteError("As senhas não conferem.")
+        const weak = await validatePassword(password, { email, name })
+        if (weak) throw new InviteError(weak)
 
         const [created] = await tx
           .insert(users)

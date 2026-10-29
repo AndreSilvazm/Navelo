@@ -1,7 +1,9 @@
 import { and, eq } from "drizzle-orm"
 import { db } from "@/db"
-import { collaboratorDocuments, collaborators } from "@/db/schema"
+import { collaboratorDocuments, collaborators, documentRequirements } from "@/db/schema"
 import { getSession, isCorporateRole } from "@/lib/auth/session"
+import { auditFromSession } from "@/lib/audit"
+import { fileHeaders, readStoredFile } from "@/lib/file-serving"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -19,12 +21,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       collaboratorId: collaborators.id,
       companyId: collaborators.companyId,
       membershipId: collaborators.membershipId,
+      requirementName: documentRequirements.name,
       fileName: collaboratorDocuments.fileName,
       mimeType: collaboratorDocuments.mimeType,
       uploadedAt: collaboratorDocuments.uploadedAt,
     })
     .from(collaboratorDocuments)
     .innerJoin(collaborators, eq(collaborators.id, collaboratorDocuments.collaboratorId))
+    .innerJoin(documentRequirements, eq(documentRequirements.id, collaboratorDocuments.requirementId))
     .where(eq(collaboratorDocuments.id, id))
   if (!meta || meta.companyId !== session.company.id) return new Response("Não encontrado", { status: 404 })
   // colaborador só vê os próprios documentos
@@ -32,22 +36,28 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   // reenviar o documento muda uploadedAt e, com isso, o ETag
   const etag = `"${id}-${meta.uploadedAt.getTime()}"`
-  const cacheHeaders = { ETag: etag, "Cache-Control": "private, max-age=3600" }
+  // Registro antes do cache: mesmo quando o navegador só revalida (304), a visualização aparece
+  // na trilha. Por isso o arquivo é servido com "no-cache" — revalida sempre, sem reenviar bytes.
+  const baixando = new URL(req.url).searchParams.has("download")
+  await auditFromSession(session, {
+    action: baixando ? "document.downloaded" : "document.viewed",
+    targetType: "document",
+    targetId: id,
+    targetLabel: meta.requirementName,
+    details: { arquivo: meta.fileName, colaboradorId: meta.collaboratorId },
+  })
+
+  const cacheHeaders = { ETag: etag, "Cache-Control": "private, no-cache" }
   if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: cacheHeaders })
 
-  const [file] = await db
-    .select({ content: collaboratorDocuments.content })
+  const [row] = await db
+    .select({ storagePath: collaboratorDocuments.storagePath, content: collaboratorDocuments.content })
     .from(collaboratorDocuments)
     .where(and(eq(collaboratorDocuments.id, id)))
+  const file = row ? await readStoredFile(row) : null
   if (!file) return new Response("Não encontrado", { status: 404 })
 
-  const disposition = new URL(req.url).searchParams.has("download") ? "attachment" : "inline"
-  return new Response(new Uint8Array(file.content), {
-    headers: {
-      ...cacheHeaders,
-      "Content-Type": meta.mimeType,
-      "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(meta.fileName)}`,
-      "X-Content-Type-Options": "nosniff",
-    },
+  return new Response(new Uint8Array(file), {
+    headers: fileHeaders({ fileName: meta.fileName, mimeType: meta.mimeType, baixando, etag }),
   })
 }

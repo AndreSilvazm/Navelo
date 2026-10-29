@@ -9,6 +9,7 @@ import {
   index,
   inet,
   integer,
+  jsonb,
   smallint,
   pgEnum,
   pgTable,
@@ -247,7 +248,10 @@ export const invoices = pgTable(
     fileName: text("file_name").notNull(),
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
-    content: bytea("content").notNull(),
+    // Arquivo no Supabase Storage (bucket privado). A coluna content é o formato antigo, mantida
+    // enquanto houver linha não migrada; depois da migração ela é removida.
+    storagePath: text("storage_path"),
+    content: bytea("content"),
     status: invoiceStatus("status").notNull().default("submitted"),
     reviewNote: text("review_note"),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
@@ -312,9 +316,10 @@ export const collaboratorDocuments = pgTable(
     fileName: text("file_name").notNull(),
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
-    // Arquivo no próprio Postgres (limite de 5 MB por upload). Nas listagens,
-    // selecione colunas explicitamente para não trazer o conteúdo.
-    content: bytea("content").notNull(),
+    // Arquivo no Supabase Storage (bucket privado). A coluna content é o formato antigo, mantida
+    // enquanto houver linha não migrada; depois da migração ela é removida.
+    storagePath: text("storage_path"),
+    content: bytea("content"),
     status: documentStatus("status").notNull().default("submitted"),
     reviewNote: text("review_note"),
     uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
@@ -388,6 +393,97 @@ export const contractRequirements = pgTable(
   },
   (t) => [index("contract_requirements_contract_idx").on(t.contractId)],
 ).enableRLS()
+
+// Trilha de auditoria: o que foi feito, por quem, quando e de onde. Linhas só entram, nunca mudam.
+// Guarda o nome de quem agiu (não só o id) para o registro continuar legível se a conta sumir.
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name"),
+    actorRole: text("actor_role"),
+    // ex.: bank_change.approved, document.downloaded, collaborator.approved
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetId: uuid("target_id"),
+    targetLabel: text("target_label"),
+    // o que mudou (de/para), motivo informado, nome do arquivo etc.
+    details: jsonb("details"),
+    ipAddress: inet("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("audit_company_idx").on(t.companyId, t.createdAt),
+    index("audit_target_idx").on(t.targetType, t.targetId, t.createdAt),
+    index("audit_actor_idx").on(t.actorUserId, t.createdAt),
+  ],
+).enableRLS()
+
+export type AuditEvent = typeof auditEvents.$inferSelect
+
+export const bankChangeStatus = pgEnum("bank_change_status", ["pending", "approved", "rejected"])
+
+// Troca de conta bancária pedida pelo colaborador. Não entra em vigor sozinha: alguém do
+// corporativo precisa aprovar, porque trocar a conta é o caminho clássico do desvio de pagamento.
+export const bankChangeRequests = pgTable(
+  "bank_change_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    collaboratorId: uuid("collaborator_id")
+      .notNull()
+      .references(() => collaborators.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    // dados pedidos (só valem depois de aprovados)
+    bankCode: char("bank_code", { length: 3 }).notNull(),
+    bankName: text("bank_name").notNull(),
+    bankAgency: text("bank_agency").notNull(),
+    bankAccount: text("bank_account").notNull(),
+    bankAccountType: bankAccountType("bank_account_type").notNull(),
+    pixKey: text("pix_key"),
+    status: bankChangeStatus("status").notNull().default("pending"),
+    reviewNote: text("review_note"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // um pedido em análise por vez, por colaborador
+    uniqueIndex("bank_change_pending_key").on(t.collaboratorId).where(sql`${t.status} = 'pending'`),
+    index("bank_change_company_idx").on(t.companyId, t.status),
+  ],
+).enableRLS()
+
+export type BankChangeRequest = typeof bankChangeRequests.$inferSelect
+
+// Pedido de troca de senha: o link vai por e-mail, vale uma vez e expira rápido.
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // hash do token enviado no link; o token em claro nunca é salvo
+    tokenHash: char("token_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    requestedIp: inet("requested_ip"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("password_resets_token_hash_key").on(t.tokenHash), index("password_resets_user_idx").on(t.userId)],
+).enableRLS()
+
+// Contador de tentativas por janela (login, convites, consultas externas). Chave = o que limitar.
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}).enableRLS()
 
 export type Company = typeof companies.$inferSelect
 export type User = typeof users.$inferSelect

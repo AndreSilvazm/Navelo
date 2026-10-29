@@ -21,7 +21,7 @@ export default async function CollaboratorPage({
   const [session, { id }, { aba }] = await Promise.all([requireSession("corporate"), params, searchParams])
   if (!UUID.test(id)) notFound()
 
-  const data = await getCollaboratorDetail(session.company.id, id)
+  const data = await getCollaboratorDetail(session.company.id, id, session.user.id)
   if (!data) notFound()
 
   // sem aba na URL abre o andamento; notas fiscais só para colaborador ativo

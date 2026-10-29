@@ -1,4 +1,7 @@
 import type { Metadata } from "next"
+import { and, desc, eq, inArray } from "drizzle-orm"
+import { db } from "@/db"
+import { bankChangeRequests } from "@/db/schema"
 import { Avatar, Badge, Card, PageHeading } from "@/figma/ui"
 import { requireActiveCollaborator } from "@/lib/collaborators"
 import { formatCnpj, onlyDigits } from "@/lib/cnpj"
@@ -16,8 +19,20 @@ function Field({ label, value, wide }: { label: string; value?: string | null; w
   )
 }
 
+const data = (d: Date) => d.toLocaleDateString("pt-BR")
+
 export default async function PortalProfilePage() {
   const { session, collaborator: c } = await requireActiveCollaborator()
+
+  // pedido de troca bancária: em análise, ou o último recusado (para a pessoa corrigir)
+  const [pedido] = await db
+    .select()
+    .from(bankChangeRequests)
+    .where(and(eq(bankChangeRequests.collaboratorId, c.id), inArray(bankChangeRequests.status, ["pending", "rejected"])))
+    .orderBy(desc(bankChangeRequests.createdAt))
+    .limit(1)
+  const emAnalise = pedido?.status === "pending" ? pedido : null
+  const recusado = pedido?.status === "rejected" ? pedido : null
   const company = session.company.tradeName ?? session.company.legalName
 
   const phone = c.phone ? onlyDigits(c.phone).replace(/^(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3") : null
@@ -73,10 +88,26 @@ export default async function PortalProfilePage() {
           <div className="mvp-section-heading">
             <div>
               <strong>Dados bancários</strong>
-              <span>Para os pagamentos. A conta precisa ser da sua empresa (mesmo CNPJ).</span>
+              <span>Para os pagamentos. A conta precisa ser da sua empresa (mesmo CNPJ). Trocar a conta passa por análise da empresa.</span>
             </div>
           </div>
           <BankForm
+            pending={
+              emAnalise
+                ? {
+                    createdAt: data(emAnalise.createdAt),
+                    values: {
+                      bankCode: emAnalise.bankCode,
+                      bankName: emAnalise.bankName,
+                      bankAgency: emAnalise.bankAgency,
+                      bankAccount: emAnalise.bankAccount,
+                      bankAccountType: emAnalise.bankAccountType,
+                      pixKey: emAnalise.pixKey ?? "",
+                    },
+                  }
+                : null
+            }
+            rejected={recusado?.reviewedAt ? { note: recusado.reviewNote, at: data(recusado.reviewedAt) } : null}
             initial={{
               bankCode: c.bankCode ?? "",
               bankName: c.bankName ?? "",

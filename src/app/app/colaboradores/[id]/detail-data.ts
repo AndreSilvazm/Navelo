@@ -1,15 +1,15 @@
 import "server-only"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { collaboratorStatusEvents, collaborators, contractCollaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
+import { bankChangeRequests, collaboratorStatusEvents, collaborators, contractCollaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
 import { getDocumentChecklist } from "@/lib/collaborators"
 import type { CollaboratorDetailData } from "./types"
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null)
 
 // Dados + documentos do colaborador em uma ida ao banco (as duas consultas rodam juntas)
-export async function getCollaboratorDetail(companyId: string, id: string): Promise<CollaboratorDetailData | null> {
-  const [rows, checklist, linkedContracts, events, invoiceRows] = await Promise.all([
+export async function getCollaboratorDetail(companyId: string, id: string, viewerUserId: string): Promise<CollaboratorDetailData | null> {
+  const [rows, checklist, linkedContracts, events, invoiceRows, bankPending] = await Promise.all([
     db
       .select({
         c: collaborators,
@@ -78,6 +78,21 @@ export async function getCollaboratorDetail(companyId: string, id: string): Prom
       .leftJoin(contracts, eq(contracts.id, invoices.contractId))
       .where(and(eq(invoices.collaboratorId, id), eq(invoices.companyId, companyId)))
       .orderBy(desc(invoices.competence), desc(invoices.createdAt)),
+    // troca de conta bancária esperando decisão
+    db
+      .select({
+        id: bankChangeRequests.id,
+        bankCode: bankChangeRequests.bankCode,
+        bankName: bankChangeRequests.bankName,
+        bankAgency: bankChangeRequests.bankAgency,
+        bankAccount: bankChangeRequests.bankAccount,
+        bankAccountType: bankChangeRequests.bankAccountType,
+        pixKey: bankChangeRequests.pixKey,
+        createdAt: bankChangeRequests.createdAt,
+      })
+      .from(bankChangeRequests)
+      .where(and(eq(bankChangeRequests.collaboratorId, id), eq(bankChangeRequests.status, "pending")))
+      .limit(1),
   ])
 
   const row = rows[0]
@@ -102,6 +117,11 @@ export async function getCollaboratorDetail(companyId: string, id: string): Prom
   return {
     id: c.id,
     status: c.status,
+    // é a própria pessoa que está olhando: ela não decide sobre o próprio cadastro
+    isSelf: row.userId === viewerUserId,
+    pendingBankChange: bankPending[0]
+      ? { ...bankPending[0], pixKey: bankPending[0].pixKey, createdAt: bankPending[0].createdAt.toISOString() }
+      : null,
     name: row.name,
     email: row.email,
     jobTitle: c.jobTitle,

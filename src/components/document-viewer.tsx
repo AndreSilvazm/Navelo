@@ -13,7 +13,7 @@ const PdfViewer = dynamic(() => import("./pdf-viewer"), {
 
 // Moldura do visualizador com o botão de tela cheia. Usa a tela cheia do navegador; onde ela não
 // existe (iPhone), cobre a janela com CSS.
-function FullscreenShell({ children }: { children: ReactNode }) {
+function FullscreenShell({ children, downloadUrl }: { children: ReactNode; downloadUrl?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [full, setFull] = useState(false)
 
@@ -40,10 +40,19 @@ function FullscreenShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`doc-viewer-shell${full ? " is-full" : ""}`} ref={ref}>
-      <button className="doc-fs-button" onClick={toggle} type="button">
-        {full ? "Sair da tela cheia" : "Tela cheia"}
-      </button>
+    // onContextMenu: no preview não se baixa pelo menu do botão direito. Para baixar existe o
+    // botão, e só ele deixa registro de quem baixou.
+    <div className={`doc-viewer-shell${full ? " is-full" : ""}`} onContextMenu={(e) => e.preventDefault()} ref={ref}>
+      <div className="doc-viewer-tools">
+        {downloadUrl && (
+          <a className="doc-fs-button" href={downloadUrl}>
+            Baixar documento
+          </a>
+        )}
+        <button className="doc-fs-button" onClick={toggle} type="button">
+          {full ? "Sair da tela cheia" : "Tela cheia"}
+        </button>
+      </div>
       {children}
     </div>
   )
@@ -78,16 +87,20 @@ export function DocumentViewer({
   if (isError && !file) return <p className="form-hint">Não foi possível carregar o documento.</p>
   if (!blob) return <p className="form-hint">Carregando documento…</p>
 
+  // o arquivo que veio do servidor pode ser baixado pelo botão (fica registrado); o que ainda
+  // está só no navegador (pré-visualização do envio) não tem o que baixar
+  const downloadUrl = url ? `${url}${url.includes("?") ? "&" : "?"}download=1` : undefined
+
   if (mimeType === "application/pdf")
     return (
-      <FullscreenShell>
+      <FullscreenShell downloadUrl={downloadUrl}>
         <PdfViewer file={blob} key={url ?? fileName} />
       </FullscreenShell>
     )
 
   if (mimeType.startsWith("image/")) {
     return (
-      <FullscreenShell>
+      <FullscreenShell downloadUrl={downloadUrl}>
       <div className="doc-viewer-pdf">
         <div className="doc-viewer-bar">
           <button disabled={zoom <= 0.5} onClick={() => setZoom((z) => z - 0.25)} type="button">
@@ -100,7 +113,14 @@ export function DocumentViewer({
         </div>
         <div className="doc-viewer-canvas">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img alt={fileName} src={imageUrl} style={{ width: `${zoom * 100}%`, maxWidth: "none", height: "auto" }} />
+          <img
+            alt={fileName}
+            className="doc-preview-image"
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+            src={imageUrl}
+            style={{ width: `${zoom * 100}%`, maxWidth: "none", height: "auto" }}
+          />
         </div>
       </div>
       </FullscreenShell>

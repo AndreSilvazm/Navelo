@@ -1,0 +1,223 @@
+import "server-only"
+import { SITE_URL } from "@/lib/site"
+import { MAILBOX } from "./senders"
+import { greet, sendEmail, sendEmailSafe } from "./send"
+import type { EmailFact } from "./layout"
+
+export { MAILBOX, SENDERS } from "./senders"
+export { renderEmail, type EmailContent } from "./layout"
+export { sendEmail, sendEmailSafe } from "./send"
+
+const brl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+const papel: Record<string, string> = { owner: "proprietário", admin: "administrador", agent: "agente", collaborator: "colaborador" }
+
+/** Conta bancária em linhas legíveis, para o e-mail mostrar o que muda */
+export function bankFacts(conta: { banco?: string | null; agencia?: string | null; conta?: string | null; tipo?: string | null; pix?: string | null }): EmailFact[] {
+  return [
+    { label: "Banco", value: conta.banco ?? "—" },
+    { label: "Agência", value: conta.agencia ?? "—" },
+    { label: "Conta", value: conta.conta ?? "—" },
+    { label: "Tipo", value: conta.tipo ? `Conta ${conta.tipo}` : "—" },
+    { label: "Chave PIX", value: conta.pix ?? "Não informada" },
+  ]
+}
+
+// ---------------------------------------------------------------- acesso
+
+/** Convite para entrar na plataforma (colaborador ou equipe da empresa) */
+export async function sendInvitationEmail(input: {
+  to: string
+  name?: string | null
+  companyName: string
+  role: string
+  jobTitle?: string | null
+  inviteUrl: string
+  expiresInDays: number
+}) {
+  const como = input.jobTitle ? `para o cargo de ${input.jobTitle}` : `como ${papel[input.role] ?? input.role}`
+  await sendEmail({
+    to: input.to,
+    sender: "sistema",
+    subject: `${input.companyName} convidou você para o Navelo`,
+    preheader: `Finalize seu acesso ${como}. O link vale ${input.expiresInDays} dias.`,
+    heading: "Você foi convidado",
+    greeting: greet(input.name),
+    paragraphs: [
+      `**${input.companyName}** convidou você para o Navelo ${como}.`,
+      "O Navelo reúne contrato, documentos e notas fiscais em um lugar só. Para começar, crie seu acesso no botão abaixo.",
+    ],
+    button: { label: "Aceitar convite", url: input.inviteUrl },
+    note: `O link vale por ${input.expiresInDays} dias e só pode ser usado uma vez. Se você não esperava este convite, ignore este e-mail.`,
+  })
+}
+
+/** Link para criar uma senha nova */
+export async function sendPasswordResetEmail(input: { to: string; name?: string | null; resetUrl: string; expiresInMinutes: number }) {
+  await sendEmail({
+    to: input.to,
+    sender: "seguranca",
+    subject: "Troca de senha no Navelo",
+    preheader: `O link vale por ${input.expiresInMinutes} minutos.`,
+    heading: "Criar uma nova senha",
+    greeting: greet(input.name),
+    paragraphs: ["Recebemos um pedido para trocar a senha da sua conta no Navelo."],
+    button: { label: "Criar nova senha", url: input.resetUrl },
+    note: `O link vale por ${input.expiresInMinutes} minutos e só pode ser usado uma vez. **Se não foi você quem pediu, ignore este e-mail**: sua senha continua a mesma.`,
+  })
+}
+
+/** Aviso depois que a senha muda de verdade */
+export async function sendPasswordChangedEmail(input: { to: string; name?: string | null; quando: string }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "seguranca",
+    subject: "Sua senha do Navelo foi alterada",
+    preheader: "Se não foi você, fale com o suporte agora.",
+    heading: "Sua senha foi alterada",
+    greeting: greet(input.name),
+    paragraphs: [`A senha da sua conta no Navelo foi alterada em ${input.quando}. Por segurança, encerramos as sessões abertas em todos os aparelhos.`],
+    warning: `**Não foi você?** Escreva agora para ${MAILBOX.suporte}: alguém pode ter acesso ao seu e-mail.`,
+    button: { label: "Entrar no Navelo", url: `${SITE_URL}/login` },
+  })
+}
+
+// ---------------------------------------------------------------- cadastro
+
+export async function sendCollaboratorApprovedEmail(input: { to: string; name?: string | null; companyName: string }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: `Seu acesso em ${input.companyName} foi liberado`,
+    preheader: "Cadastro aprovado: já dá para enviar notas fiscais.",
+    heading: "Acesso liberado",
+    greeting: greet(input.name),
+    paragraphs: [
+      `**${input.companyName}** analisou seu cadastro e liberou seu acesso ao portal.`,
+      "A partir de agora você acompanha o contrato, envia as notas fiscais e vê os prazos no portal do colaborador.",
+    ],
+    button: { label: "Abrir o portal", url: `${SITE_URL}/portal` },
+  })
+}
+
+export async function sendCollaboratorRejectedEmail(input: { to: string; name?: string | null; companyName: string; motivo: string }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: `Seu cadastro em ${input.companyName} não foi liberado`,
+    preheader: "Veja o motivo informado pela empresa.",
+    heading: "Cadastro não liberado",
+    greeting: greet(input.name),
+    paragraphs: [`**${input.companyName}** analisou seu cadastro e não liberou o acesso.`],
+    facts: [{ label: "Motivo informado", value: input.motivo }],
+    note: "Se achar que houve engano, fale diretamente com a empresa.",
+  })
+}
+
+// ---------------------------------------------------------------- conta bancária
+
+/** Avisa a empresa que alguém pediu para trocar a conta de recebimento */
+export async function sendBankChangeRequestedEmail(input: {
+  to: string
+  name?: string | null
+  collaboratorName: string
+  collaboratorId: string
+  de: EmailFact[]
+  para: EmailFact[]
+}) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "seguranca",
+    subject: `Pedido de troca de conta bancária: ${input.collaboratorName}`,
+    preheader: "Confirme com a pessoa antes de aprovar.",
+    heading: "Troca de conta esperando análise",
+    greeting: greet(input.name),
+    paragraphs: [
+      `**${input.collaboratorName}** pediu para trocar a conta que recebe os pagamentos. Nada muda enquanto você não aprovar.`,
+      "Antes de aprovar, confirme com a pessoa por um canal que você já conhece (telefone ou presencialmente). Trocar a conta é o golpe mais comum nesse tipo de operação, e e-mail invadido é a porta de entrada.",
+    ],
+    factsTitle: "Conta nova pedida",
+    facts: input.para,
+    button: { label: "Analisar o pedido", url: `${SITE_URL}/app/colaboradores/${input.collaboratorId}?aba=bancarios` },
+  })
+}
+
+export async function sendBankChangeApprovedEmail(input: { to: string; name?: string | null; companyName: string; conta: EmailFact[] }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "seguranca",
+    subject: "Sua nova conta bancária foi aprovada",
+    preheader: "Os próximos pagamentos vão para a conta nova.",
+    heading: "Conta bancária atualizada",
+    greeting: greet(input.name),
+    paragraphs: [`**${input.companyName}** aprovou a troca da sua conta. Os próximos pagamentos vão para a conta abaixo.`],
+    factsTitle: "Conta em vigor",
+    facts: input.conta,
+    warning: `**Não foi você quem pediu essa troca?** Avise a empresa e escreva para ${MAILBOX.suporte} imediatamente.`,
+  })
+}
+
+export async function sendBankChangeRejectedEmail(input: { to: string; name?: string | null; companyName: string; motivo: string }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: "Sua troca de conta bancária foi recusada",
+    preheader: "A conta anterior continua valendo.",
+    heading: "Troca de conta recusada",
+    greeting: greet(input.name),
+    paragraphs: [`**${input.companyName}** recusou o pedido de troca da sua conta bancária. A conta anterior continua recebendo os pagamentos.`],
+    facts: [{ label: "Motivo informado", value: input.motivo }],
+    button: { label: "Corrigir e enviar de novo", url: `${SITE_URL}/portal/perfil` },
+  })
+}
+
+// ---------------------------------------------------------------- notas fiscais
+
+export async function sendInvoiceApprovedEmail(input: { to: string; name?: string | null; companyName: string; numero: string; competencia: string; valorCentavos: number }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: `Nota ${input.numero} aprovada`,
+    preheader: "Aprovada e na fila de pagamento.",
+    heading: "Nota fiscal aprovada",
+    greeting: greet(input.name),
+    paragraphs: [`**${input.companyName}** aprovou a sua nota. Ela entra na fila de pagamento; avisamos de novo quando o pagamento for registrado.`],
+    facts: [
+      { label: "Nota", value: `nº ${input.numero}` },
+      { label: "Competência", value: input.competencia },
+      { label: "Valor", value: brl(input.valorCentavos) },
+    ],
+    button: { label: "Ver minhas notas", url: `${SITE_URL}/portal/notas-fiscais` },
+  })
+}
+
+export async function sendInvoiceRejectedEmail(input: { to: string; name?: string | null; companyName: string; numero: string; competencia: string; motivo: string }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: `Nota ${input.numero} recusada`,
+    preheader: "Veja o motivo e envie de novo.",
+    heading: "Nota fiscal recusada",
+    greeting: greet(input.name),
+    paragraphs: [`**${input.companyName}** recusou a nota nº ${input.numero}, de competência ${input.competencia}.`],
+    facts: [{ label: "Motivo informado", value: input.motivo }],
+    button: { label: "Enviar nota corrigida", url: `${SITE_URL}/portal/notas-fiscais/enviar` },
+  })
+}
+
+export async function sendInvoicePaidEmail(input: { to: string; name?: string | null; companyName: string; numero: string; competencia: string; valorCentavos: number }) {
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: `Pagamento da nota ${input.numero} registrado`,
+    preheader: `${brl(input.valorCentavos)} marcados como pagos.`,
+    heading: "Pagamento registrado",
+    greeting: greet(input.name),
+    paragraphs: [`**${input.companyName}** registrou o pagamento da nota abaixo. O crédito na sua conta depende do banco.`],
+    facts: [
+      { label: "Nota", value: `nº ${input.numero}` },
+      { label: "Competência", value: input.competencia },
+      { label: "Valor", value: brl(input.valorCentavos) },
+    ],
+    button: { label: "Ver minhas notas", url: `${SITE_URL}/portal/notas-fiscais` },
+  })
+}

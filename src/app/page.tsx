@@ -1,3 +1,4 @@
+import { headers } from "next/headers"
 import { LandingPage } from "@/figma/site"
 import { LEGAL } from "@/lib/legal"
 import { SITE, SITE_URL } from "@/lib/site"
@@ -25,10 +26,16 @@ const jsonLd = {
   ],
 }
 
-export default function Page() {
+// "<" escapado para o JSON jamais conseguir fechar a tag <script>
+const jsonLdHtml = JSON.stringify(jsonLd).replaceAll("<", "\\u003c")
+
+export default async function Page() {
+  // o nonce da CSP vem do proxy; sem ele o navegador bloqueia o bloco abaixo
+  const nonce = (await headers()).get("x-nonce") ?? undefined
+
   return (
     <>
-      <script dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\u003c") }} type="application/ld+json" />
+      <script dangerouslySetInnerHTML={{ __html: jsonLdHtml }} nonce={nonce} type="application/ld+json" />
       <LandingPage />
     </>
   )

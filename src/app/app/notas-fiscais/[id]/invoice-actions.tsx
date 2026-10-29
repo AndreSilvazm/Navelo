@@ -11,7 +11,7 @@ type Status = "submitted" | "approved" | "rejected" | "paid"
 
 // Decisões sobre a nota: aprovar, recusar (pede o motivo num modal) e, depois, marcar como paga.
 // Cada decisão grava a data e quem a tomou.
-export function InvoiceActions({ invoiceId, number, status }: { invoiceId: string; number: string; status: Status }) {
+export function InvoiceActions({ invoiceId, isSelf, number, status }: { invoiceId: string; isSelf: boolean; number: string; status: Status }) {
   const router = useRouter()
   const [rejecting, setRejecting] = useState(false)
 
@@ -30,6 +30,9 @@ export function InvoiceActions({ invoiceId, number, status }: { invoiceId: strin
     },
   })
   const busy = approve.isPending || pay.isPending || reject.isPending
+
+  // a própria pessoa não aprova, recusa nem paga a sua nota
+  if (isSelf) return <span className="form-hint">Nota sua: a decisão é de outra pessoa do corporativo.</span>
 
   return (
     <>

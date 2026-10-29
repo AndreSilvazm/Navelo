@@ -35,6 +35,9 @@ export function LoginForm() {
       />
       <div className="form-options">
         <Checkbox label="Lembrar de mim" name="remember" />
+        <Link href="/recuperar-senha">
+          Esqueci minha senha
+        </Link>
       </div>
       <Button className="full-button button-lg" loading={pending} disabled={pending} type="submit">
         Entrar

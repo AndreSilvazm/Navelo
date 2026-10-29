@@ -3,6 +3,7 @@
 import { useActionState } from "react"
 import Link from "next/link"
 import { Button, TextField } from "@/figma/ui"
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/auth/password-rules"
 import { acceptInvitation } from "./actions"
 
 export function AcceptForm({
@@ -56,9 +57,10 @@ export function AcceptForm({
           <TextField
             autoComplete="new-password"
             icon="lock"
+            hint={PASSWORD_HINT}
             label="Crie uma senha"
             name="password"
-            placeholder="Mínimo de 8 caracteres"
+            placeholder={`Mínimo de ${MIN_PASSWORD_LENGTH} caracteres`}
             required
             type="password"
           />

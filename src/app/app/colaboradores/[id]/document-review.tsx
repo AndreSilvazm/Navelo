@@ -15,7 +15,7 @@ const size = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round
 
 // a versão (data do upload) na URL garante que um arquivo substituído não venha do cache antigo
 export const documentUrl = (doc: { id: string; uploadedAt: string }) =>
-  `/app/colaboradores/documentos/${doc.id}?v=${new Date(doc.uploadedAt).getTime()}`
+  `/api/documentos/${doc.id}/arquivo?v=${new Date(doc.uploadedAt).getTime()}`
 
 // Análise dos documentos: lista à esquerda, visualizador e decisão à direita, sem sair da página.
 // Aprovar/recusar chama o servidor e depois atualiza o cache (a lista de colaboradores também).

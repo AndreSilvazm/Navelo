@@ -52,6 +52,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       paidBy: sql<string | null>`(select u.name from users u where u.id = ${invoices.paidByUserId})`,
       contract: contracts.name,
       collaboratorId: collaborators.id,
+      collaboratorUserId: memberships.userId,
       collaborator: users.name,
       legalName: collaborators.legalName,
       cnpj: collaborators.cnpj,
@@ -93,6 +94,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           }
 
   const fileUrl = `/api/notas/${row.id}/arquivo?v=${row.createdAt.getTime()}`
+  // nota da própria pessoa logada: ela não decide sobre ela
+  const isSelf = row.collaboratorUserId === session.user.id
   const backHref = `/app/colaboradores/${row.collaboratorId}?aba=notas`
 
   return (
@@ -114,7 +117,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </div>
         <div className="nf-detail-actions">
           <Badge tone={invoiceStatusTone[row.status]}>{invoiceStatusLabel[row.status]}</Badge>
-          <InvoiceActions invoiceId={row.id} number={row.number} status={row.status} />
+          <InvoiceActions invoiceId={row.id} isSelf={isSelf} number={row.number} status={row.status} />
         </div>
       </div>
 

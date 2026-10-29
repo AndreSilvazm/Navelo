@@ -1,5 +1,6 @@
 "use server"
 
+import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { and, eq, ne } from "drizzle-orm"
@@ -7,6 +8,7 @@ import { db } from "@/db"
 import { contractCollaborators, contracts, invoices } from "@/db/schema"
 import { MAX_FILE_BYTES, detectMimeType, requireActiveCollaborator } from "@/lib/collaborators"
 import { parseBRLToCents } from "@/lib/format"
+import { invoicePath, putFile, removeFile, storageEnabled } from "@/lib/storage"
 
 export type InvoiceState = { error?: string } | undefined
 
@@ -55,8 +57,15 @@ export async function createInvoice(_: InvoiceState, formData: FormData): Promis
   const contractId = text(formData, "contractId")
   if (mine.length > 0 && !mine.some((c) => c.id === contractId)) return { error: "Escolha o contrato a que a nota se refere." }
 
+  // o arquivo vai para o bucket; na linha fica só o caminho (ou o conteúdo, se o storage ainda
+  // não estiver configurado)
+  const id = randomUUID()
+  const caminho = storageEnabled() ? invoicePath(session.company.id, collaborator.id, id, mimeType) : null
+  if (caminho) await putFile(caminho, content, mimeType)
+
   try {
     await db.insert(invoices).values({
+      id,
       companyId: session.company.id,
       collaboratorId: collaborator.id,
       contractId: mine.length > 0 ? contractId : null,
@@ -67,9 +76,11 @@ export async function createInvoice(_: InvoiceState, formData: FormData): Promis
       fileName: file.name.slice(0, 200),
       mimeType,
       sizeBytes: content.length,
-      content,
+      storagePath: caminho,
+      content: caminho ? null : content,
     })
   } catch (e) {
+    if (caminho) await removeFile(caminho) // não deixa arquivo órfão no bucket
     if (isUniqueViolation(e)) return { error: `A nota nº ${number} já foi cadastrada por você.` }
     throw e
   }

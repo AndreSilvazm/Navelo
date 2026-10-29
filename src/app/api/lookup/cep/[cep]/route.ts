@@ -1,8 +1,9 @@
-import { getSession } from "@/lib/auth/session"
+import { guardLookup } from "@/lib/api-guard"
 
 // Consulta pública de CEP (BrasilAPI), feita pelo servidor. Só para quem está logado.
 export async function GET(_req: Request, ctx: { params: Promise<{ cep: string }> }) {
-  if (!(await getSession())) return Response.json({ error: "Não autorizado" }, { status: 401 })
+  const denied = await guardLookup()
+  if (denied) return denied
 
   const { cep } = await ctx.params
   if (!/^\d{8}$/.test(cep)) return Response.json({ found: false, reason: "invalid" }, { status: 400 })

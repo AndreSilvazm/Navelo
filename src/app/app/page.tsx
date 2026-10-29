@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { and, count, desc, eq, gte, inArray, isNull, gt, ne, sql, sum } from "drizzle-orm"
 import { db } from "@/db"
-import { collaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
+import { bankChangeRequests, collaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
 import { Badge, Button, PageHeading } from "@/figma/ui"
 import { requireSession } from "@/lib/auth/session"
 import { formatBRL, formatDate } from "@/lib/format"
@@ -30,7 +30,7 @@ export default async function OverviewPage() {
   const seriesStart = new Date(now.getFullYear(), now.getMonth() - (MONTHS_BACK - 1), 1)
   const seriesFrom = `${key(seriesStart)}-01`
 
-  const [counts, contractRows, byStatus, paidThisMonth, series, pendingInvites, recent] = await Promise.all([
+  const [counts, contractRows, byStatus, paidThisMonth, series, pendingInvites, recent, bankRequests] = await Promise.all([
     getTabCounts(companyId),
     db
       .select({
@@ -79,6 +79,12 @@ export default async function OverviewPage() {
       .where(eq(invoices.companyId, companyId))
       .orderBy(desc(invoices.createdAt))
       .limit(5),
+    // trocas de conta bancária esperando decisão
+    db
+      .select({ n: count(), collaboratorId: bankChangeRequests.collaboratorId })
+      .from(bankChangeRequests)
+      .where(and(eq(bankChangeRequests.companyId, companyId), eq(bankChangeRequests.status, "pending")))
+      .groupBy(bankChangeRequests.collaboratorId),
   ])
 
   const inv = (s: string) => byStatus.find((x) => x.status === s) ?? { n: 0, total: 0 }
@@ -91,6 +97,11 @@ export default async function OverviewPage() {
   // o que precisa da atenção da empresa (só aparece o que tem algo a fazer)
   const attention = [
     { n: counts.revisao, text: "colaborador(es) aguardando análise do cadastro", href: "/app/colaboradores?aba=revisao" },
+    {
+      n: bankRequests.length,
+      text: "troca(s) de conta bancária esperando sua aprovação",
+      href: bankRequests.length === 1 ? `/app/colaboradores/${bankRequests[0].collaboratorId}?aba=bancarios` : "/app/colaboradores?aba=ativos",
+    },
     { n: inv("submitted").n, text: "nota(s) fiscal(is) em revisão", href: "/app/notas-fiscais?aba=revisao" },
     { n: inv("approved").n, text: `nota(s) aprovada(s) aguardando pagamento (${formatBRL(inv("approved").total)})`, href: "/app/notas-fiscais?aba=aprovadas" },
     { n: pendingInvites[0].n, text: "convite(s) ainda não aceito(s)", href: "/app/colaboradores?aba=convites" },

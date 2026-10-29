@@ -567,7 +567,7 @@ a.table-person:hover strong { color: var(--zn-primary-strong); }
 .login-form > .logo { margin-bottom: 20px; }
 .login-heading h1 { font-size: var(--fs-3xl); font-weight: 650; letter-spacing: -.025em; }
 .login-heading p { margin-top: 6px; color: var(--text-muted); font-size: var(--fs-md); }
-.form-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-base); }
+.form-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-base); }
 .form-options > a, .signup-link a { color: var(--zn-primary-strong); font-weight: 600; border-radius: 4px; }
 .form-options > a:hover, .signup-link a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .form-divider { position: relative; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: var(--fs-sm); }
@@ -1222,6 +1222,10 @@ a.table-person:hover strong { color: var(--zn-primary-strong); }
 .doc-viewer-shell:fullscreen { background: var(--zn-ice); }
 .doc-viewer-shell.is-full { position: fixed; inset: 0; z-index: 200; background: var(--zn-ice); }
 .doc-viewer-shell:fullscreen .doc-viewer-pdf, .doc-viewer-shell.is-full .doc-viewer-pdf, .invoice-preview .doc-viewer-shell:fullscreen .doc-viewer-pdf, .invoice-preview .doc-viewer-shell.is-full .doc-viewer-pdf { height: 100vh; min-height: 0; }
+.doc-viewer-tools { position: absolute; z-index: 2; top: 7px; right: 12px; display: flex; gap: 8px; }
+.doc-viewer-tools .doc-fs-button { position: static; }
+/* o preview não se arrasta nem se salva pelo menu do botão direito: para baixar existe o botão */
+.doc-preview-image { -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
 .doc-viewer-sep { width: 1px; height: 20px; margin: 0 6px; background: var(--border); }
 .doc-viewer-canvas { overflow: auto; padding: 16px; text-align: center; }
 .doc-viewer-canvas .react-pdf__Page { display: inline-block; box-shadow: var(--shadow-sm); }
@@ -1568,3 +1572,12 @@ a.table-person:hover strong { color: var(--zn-primary-strong); }
 .profile-head > div { display: grid; flex: 1; gap: 2px; min-width: 200px; }
 .profile-head strong { font-family: var(--font-display); font-size: 22px; letter-spacing: -.01em; }
 .profile-head span { color: var(--text-muted); font-size: var(--fs-base); }
+
+/* Pedido de troca de conta bancária esperando decisão */
+.bank-request { margin-bottom: 20px; padding: 16px; border: 1px solid var(--zn-warning); border-radius: var(--radius-lg); background: var(--zn-warning-bg); }
+.bank-request .mvp-section-heading { margin-bottom: 12px; }
+.bank-request .info-grid { background: var(--surface); border-radius: var(--radius-md); padding: 12px; }
+
+/* Detalhes de cada linha da auditoria */
+.audit-details { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; max-width: 420px; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.5; }
+.audit-details b { color: var(--text); font-weight: 600; }

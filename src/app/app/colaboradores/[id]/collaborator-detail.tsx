@@ -9,7 +9,7 @@ import { ReasonDialog } from "@/components/reason-dialog"
 import { formatCnpj, onlyDigits } from "@/lib/cnpj"
 import { documentFileQuery } from "@/lib/document-file"
 import { initialsOf } from "@/lib/initials"
-import { approveCollaborator, reactivateCollaborator, rejectCollaborator, reopenCollaborator, suspendCollaborator } from "../actions"
+import { approveBankChange, approveCollaborator, reactivateCollaborator, rejectBankChange, rejectCollaborator, reopenCollaborator, suspendCollaborator } from "../actions"
 import { statusLabel, statusTone } from "../types"
 import { CnpjPanel } from "./cnpj-panel"
 import { CollaboratorDashboard } from "./collaborator-dashboard"
@@ -54,6 +54,8 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
   const [tab, setTab] = useState<DetailTab>(initialTab)
   // painel de motivo: recusar o acesso (antes da liberação) ou suspendê-lo (depois)
   const [panel, setPanel] = useState<"reject" | "suspend" | null>(null)
+  // recusa do pedido de troca de conta (pede o motivo no mesmo tipo de modal)
+  const [rejectingBank, setRejectingBank] = useState(false)
 
   const { data = initial } = useQuery({
     queryKey: detailQueryKey(initial.id),
@@ -104,13 +106,27 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
     },
   })
   const reopen = useMutation({ mutationFn: () => reopenCollaborator(data.id), onSuccess: refresh })
+  const approveBank = useMutation({ mutationFn: (id: string) => approveBankChange(id), onSuccess: refresh })
+  const rejectBank = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => {
+      const form = new FormData()
+      form.set("reason", reason)
+      return rejectBankChange(id, form)
+    },
+    onSuccess: () => {
+      setRejectingBank(false)
+      refresh()
+    },
+  })
   const reactivate = useMutation({ mutationFn: () => reactivateCollaborator(data.id), onSuccess: refresh })
 
   const title = data.legalName ?? data.name
-  const canApprove = data.status === "in_review" && isReadyForApproval(data.checklist)
-  const canReject = data.status === "profile_pending" || data.status === "documents_pending" || data.status === "in_review"
+  // ninguém decide sobre o próprio cadastro: as ações somem e o motivo aparece
+  const canDecide = !data.isSelf
+  const canApprove = canDecide && data.status === "in_review" && isReadyForApproval(data.checklist)
+  const canReject = canDecide && (data.status === "profile_pending" || data.status === "documents_pending" || data.status === "in_review")
   const inReview = data.invoices.filter((i) => i.status === "submitted").length // notas esperando decisão
-  const canSuspend = data.status === "active"
+  const canSuspend = canDecide && data.status === "active"
   const busy = approve.isPending || decide.isPending || reopen.isPending || reactivate.isPending
   const address = [
     [data.street, data.number].filter(Boolean).join(", "),
@@ -151,24 +167,29 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
               Suspender acesso
             </Button>
           )}
-          {data.status === "suspended" && (
+          {canDecide && data.status === "suspended" && (
             <Button disabled={busy} loading={reactivate.isPending} onClick={() => reactivate.mutate()}>
               Reativar acesso
             </Button>
           )}
-          {data.status === "in_review" && (
+          {canDecide && data.status === "in_review" && (
             <Button disabled={!canApprove || busy} icon="check" loading={approve.isPending} onClick={() => approve.mutate()}>
               Liberar acesso
             </Button>
           )}
-          {data.status === "rejected" && (
+          {canDecide && data.status === "rejected" && (
             <Button disabled={busy} loading={reopen.isPending} onClick={() => reopen.mutate()} variant="secondary">
               Reabrir cadastro
             </Button>
           )}
         </div>
       </div>
-      {data.status === "in_review" && !canApprove && (
+      {data.isSelf && (
+        <p className="form-alert" style={{ marginTop: 4, marginBottom: 16 }}>
+          Este é o seu próprio cadastro de colaborador. Quem analisa e decide tem que ser outra pessoa do corporativo.
+        </p>
+      )}
+      {canDecide && data.status === "in_review" && !canApprove && (
         <p className="form-hint" style={{ marginTop: -8, marginBottom: 16, textAlign: "right" }}>
           Aprove todos os documentos obrigatórios para liberar o acesso.
         </p>
@@ -256,8 +277,20 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
       )}
 
       {activeTab === "documentos" && (
-        <DocumentReview canReview={data.status === "in_review"} collaboratorId={data.id} items={data.checklist} />
+        <DocumentReview canReview={canDecide && data.status === "in_review"} collaboratorId={data.id} items={data.checklist} />
       )}
+
+      <ReasonDialog
+        confirmLabel="Confirmar recusa"
+        description="O colaborador verá o motivo e poderá enviar os dados de novo."
+        error={rejectBank.isError}
+        label="Motivo da recusa"
+        onClose={() => setRejectingBank(false)}
+        onConfirm={(reason) => rejectBank.mutate({ id: data.pendingBankChange!.id, reason })}
+        open={rejectingBank && !!data.pendingBankChange}
+        pending={rejectBank.isPending}
+        title="Recusar a troca de conta"
+      />
 
       {activeTab === "bancarios" && (
         <Card className="mvp-settings-card">
@@ -267,6 +300,57 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
               <span>Conta para os pagamentos, informada pelo colaborador. Deve ser da própria empresa (mesmo CNPJ).</span>
             </div>
           </div>
+          {data.pendingBankChange && (
+            <div className="bank-request">
+              <div className="mvp-section-heading">
+                <div>
+                  <strong>Troca de conta esperando decisão</strong>
+                  <span>
+                    Pedida pelo colaborador em {dateTime(data.pendingBankChange.createdAt)}. Confirme com a pessoa por um canal
+                    que você já conhece antes de aprovar: troca de conta é o golpe mais comum nesse tipo de operação.
+                  </span>
+                </div>
+                <Badge tone="warning">Em análise</Badge>
+              </div>
+              <dl className="info-grid">
+                <div className="info-field">
+                  <dt>Banco pedido</dt>
+                  <dd className="bank-line">
+                    <BankLogo code={data.pendingBankChange.bankCode} name={data.pendingBankChange.bankName} size={32} />
+                    <span>
+                      {data.pendingBankChange.bankCode} · {data.pendingBankChange.bankName}
+                    </span>
+                  </dd>
+                </div>
+                <Field label="Tipo de conta" value={data.pendingBankChange.bankAccountType === "savings" ? "Conta poupança" : "Conta corrente"} />
+                <Field label="Agência" value={data.pendingBankChange.bankAgency} />
+                <Field label="Conta" value={data.pendingBankChange.bankAccount} />
+                <div className="info-field info-wide">
+                  <dt>Chave PIX</dt>
+                  <dd>{data.pendingBankChange.pixKey || "Não informada"}</dd>
+                </div>
+              </dl>
+              {canDecide ? (
+                <div className="portal-form-actions" style={{ marginTop: 16 }}>
+                  <Button disabled={approveBank.isPending || rejectBank.isPending} onClick={() => setRejectingBank(true)} variant="secondary">
+                    Recusar troca
+                  </Button>
+                  <Button
+                    disabled={approveBank.isPending || rejectBank.isPending}
+                    icon="check"
+                    loading={approveBank.isPending}
+                    onClick={() => approveBank.mutate(data.pendingBankChange!.id)}
+                  >
+                    Aprovar troca
+                  </Button>
+                </div>
+              ) : (
+                <p className="form-hint" style={{ marginTop: 12 }}>
+                  Pedido seu: quem decide é outra pessoa do corporativo.
+                </p>
+              )}
+            </div>
+          )}
           {data.bankCode ? (
             <dl className="info-grid">
               <div className="info-field">

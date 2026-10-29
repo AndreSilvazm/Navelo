@@ -10,6 +10,7 @@ import { UFS } from "@/lib/br-states"
 import { isValidCnpj, onlyDigits } from "@/lib/cnpj"
 import { COMPANY_FIELDS, fetchCompanyProfile } from "@/lib/cnpj-lookup"
 import { syncBankData } from "@/lib/collaborator-join"
+import { documentPath, putFile, storageEnabled } from "@/lib/storage"
 import {
   MAX_FILE_BYTES,
   detectMimeType,
@@ -161,13 +162,25 @@ export async function submitDocuments(_: FormState, formData: FormData): Promise
   )
   if (missing.length > 0) return { error: `Faltam documentos obrigatórios: ${missing.map((m) => m.requirement.name).join(", ")}.` }
 
+  // sobe os arquivos para o bucket antes de gravar: se algum falhar, nada é registrado
+  const enviados = new Map<string, string>()
+  if (storageEnabled()) {
+    for (const s of staged) {
+      const caminho = documentPath(collaborator.companyId, collaborator.id, s.requirementId, s.mimeType)
+      await putFile(caminho, s.content, s.mimeType)
+      enviados.set(s.requirementId, caminho)
+    }
+  }
+
   await db.transaction(async (tx) => {
     for (const s of staged) {
+      const caminho = enviados.get(s.requirementId) ?? null
       const data = {
         fileName: s.fileName,
         mimeType: s.mimeType,
         sizeBytes: s.content.length,
-        content: s.content,
+        storagePath: caminho,
+        content: caminho ? null : s.content,
         status: "submitted" as const,
         reviewNote: null,
         reviewedAt: null,

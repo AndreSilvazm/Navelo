@@ -13,7 +13,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params
   if (!UUID.test(id)) return Response.json({ error: "Não encontrado" }, { status: 404 })
 
-  const data = await getCollaboratorDetail(session.company.id, id)
+  const data = await getCollaboratorDetail(session.company.id, id, session.user.id)
   if (!data) return Response.json({ error: "Não encontrado" }, { status: 404 })
 
   return Response.json(data, { headers: { "Cache-Control": "private, no-store" } })

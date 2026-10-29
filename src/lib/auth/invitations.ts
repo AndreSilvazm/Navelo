@@ -1,9 +1,9 @@
 import "server-only"
-import { eq, sql } from "drizzle-orm"
+import { eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { companies, invitations, users, type MembershipRole } from "@/db/schema"
 import { sendInvitationEmail } from "@/lib/email"
-import { generateToken, hashToken, normalizeEmail } from "./tokens"
+import { generateToken, hashToken, legacyHashToken, normalizeEmail } from "./tokens"
 
 export type InvitationLookup =
   | { status: "invalid" | "expired" | "accepted" | "revoked" | "company_inactive" }
@@ -22,7 +22,7 @@ export async function lookupInvitation(token: string): Promise<InvitationLookup>
     .select({ invitation: invitations, company: companies })
     .from(invitations)
     .innerJoin(companies, eq(companies.id, invitations.companyId))
-    .where(eq(invitations.tokenHash, hashToken(token)))
+    .where(inArray(invitations.tokenHash, [hashToken(token), legacyHashToken(token)]))
     .limit(1)
 
   if (!row) return { status: "invalid" }
@@ -84,6 +84,7 @@ export async function createInvitation(input: {
       name: input.name,
       companyName: company.tradeName ?? company.legalName,
       role: input.role,
+      jobTitle: input.jobTitle,
       inviteUrl,
       expiresInDays: INVITE_TTL_DAYS,
     })

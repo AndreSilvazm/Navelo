@@ -113,6 +113,41 @@
       "when": 1792812698149,
       "tag": "0015_terms_acceptance",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792821912733,
+      "tag": "0016_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792823751793,
+      "tag": "0017_password_resets",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792824277182,
+      "tag": "0018_bank_change_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792825044744,
+      "tag": "0019_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792892537520,
+      "tag": "0020_storage_path",
+      "breakpoints": true
     }
   ]
 }

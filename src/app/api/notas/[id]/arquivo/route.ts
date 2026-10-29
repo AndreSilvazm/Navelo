@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/db"
 import { collaborators, invoices } from "@/db/schema"
 import { getSession, isCorporateRole } from "@/lib/auth/session"
+import { auditFromSession } from "@/lib/audit"
+import { fileHeaders, readStoredFile } from "@/lib/file-serving"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -18,6 +20,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     .select({
       companyId: invoices.companyId,
       collaboratorId: invoices.collaboratorId,
+      number: invoices.number,
       fileName: invoices.fileName,
       mimeType: invoices.mimeType,
       createdAt: invoices.createdAt,
@@ -37,19 +40,28 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   // o arquivo da nota nunca muda; o ETag acompanha a data do cadastro
   const etag = `"${id}-${meta.createdAt.getTime()}"`
-  const cacheHeaders = { ETag: etag, "Cache-Control": "private, max-age=3600" }
+  // Registro antes do cache: mesmo quando o navegador só revalida (304), a visualização aparece
+  // na trilha. Por isso o arquivo é servido com "no-cache" — revalida sempre, sem reenviar bytes.
+  const baixando = new URL(req.url).searchParams.has("download")
+  await auditFromSession(session, {
+    action: baixando ? "invoice.downloaded" : "invoice.viewed",
+    targetType: "invoice",
+    targetId: id,
+    targetLabel: `nº ${meta.number}`,
+    details: { arquivo: meta.fileName, colaboradorId: meta.collaboratorId },
+  })
+
+  const cacheHeaders = { ETag: etag, "Cache-Control": "private, no-cache" }
   if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: cacheHeaders })
 
-  const [file] = await db.select({ content: invoices.content }).from(invoices).where(eq(invoices.id, id))
+  const [row] = await db
+    .select({ storagePath: invoices.storagePath, content: invoices.content })
+    .from(invoices)
+    .where(eq(invoices.id, id))
+  const file = row ? await readStoredFile(row) : null
   if (!file) return new Response("Não encontrado", { status: 404 })
 
-  const disposition = new URL(req.url).searchParams.has("download") ? "attachment" : "inline"
-  return new Response(new Uint8Array(file.content), {
-    headers: {
-      ...cacheHeaders,
-      "Content-Type": meta.mimeType,
-      "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(meta.fileName)}`,
-      "X-Content-Type-Options": "nosniff",
-    },
+  return new Response(new Uint8Array(file), {
+    headers: fileHeaders({ fileName: meta.fileName, mimeType: meta.mimeType, baixando, etag }),
   })
 }

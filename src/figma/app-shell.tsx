@@ -25,6 +25,7 @@ const workspaceNav: Array<{
   { icon: "contract", label: "Contratos", to: "/app/contratos" },
   { icon: "people", label: "Colaboradores", short: "Equipe", to: "/app/colaboradores" },
   { icon: "upload", label: "Notas fiscais", short: "Notas", to: "/app/notas-fiscais" },
+  { icon: "shield", label: "Auditoria", to: "/app/auditoria" },
 ]
 
 export function AppShell({
