@@ -15,6 +15,28 @@ const projeto = projectOf(url)
 console.log(`\nAmbiente ativo em ${ENV_FILE}: ${env.appEnv ? LABEL[env.appEnv] : "DESCONHECIDO"}`)
 if (projeto) console.log(`Banco: projeto ${projeto.ref} (${projeto.host})`)
 
+// usuário e porta de cada conexão (nunca a senha), com o que se espera em staging e produção
+const esperado: Record<string, { usuario: string; porta: string }> = {
+  DATABASE_URL: { usuario: "navelo_app", porta: "6543" },
+  DATABASE_ADMIN_URL: { usuario: "navelo_admin", porta: "6543" },
+  DATABASE_MIGRATE_URL: { usuario: "postgres", porta: "5432" },
+}
+if (env.appEnv === "staging" || env.appEnv === "production") {
+  console.log("")
+  for (const [chave, regra] of Object.entries(esperado)) {
+    const info = projectOf(env.values[chave])
+    if (!info) {
+      console.log(`  ${chave.padEnd(22)} (não preenchida)`)
+      continue
+    }
+    const usuario = info.user.split(".")[0]
+    const porta = info.host.split(":")[1]
+    const certo = usuario === regra.usuario && porta === regra.porta
+    const aviso = certo ? "OK" : `ERRADO, o certo é usuário ${regra.usuario} e porta ${regra.porta}`
+    console.log(`  ${chave.padEnd(22)} usuário ${usuario.padEnd(13)} porta ${porta}   ${aviso}`)
+  }
+}
+
 if (problemas.length > 0) {
   for (const p of problemas) console.error(`\n✗ ${p}`)
   process.exit(1)

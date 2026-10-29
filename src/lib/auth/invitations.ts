@@ -5,6 +5,7 @@ import { dbAdmin } from "@/db/admin"
 import { companies, invitations, users, type MembershipRole } from "@/db/schema"
 import { IS_PRODUCTION } from "@/lib/app-env"
 import { sendInvitationEmail } from "@/lib/email"
+import { senderAddress } from "@/lib/email/send"
 import { getAppUrl } from "@/lib/env"
 import { generateToken, hashToken, legacyHashToken, normalizeEmail } from "./tokens"
 
@@ -92,14 +93,16 @@ export async function createInvitation(input: {
       inviteUrl,
       expiresInDays: INVITE_TTL_DAYS,
     })
-    return { inviteUrl, emailSent }
+    // emailSent false sem exceção = não há RESEND_API_KEY neste ambiente (e ele não é produção)
+    return { inviteUrl, emailSent, emailError: emailSent ? undefined : "RESEND_API_KEY não configurada neste ambiente", from: senderAddress() }
   } catch (e) {
     // Fora de produção (desenvolvimento e staging) o e-mail pode não estar configurado, ou o
     // provedor estar em modo de teste: o convite fica criado e o link é mostrado na tela para ser
     // passado na mão. Em produção, sem e-mail o convite não chega a ninguém: é desfeito.
     if (!IS_PRODUCTION) {
-      console.warn("E-mail de convite não enviado:", e instanceof Error ? e.message : e)
-      return { inviteUrl, emailSent: false }
+      const motivo = e instanceof Error ? e.message : String(e)
+      console.warn("E-mail de convite não enviado:", motivo)
+      return { inviteUrl, emailSent: false, emailError: motivo.replace(/^Falha ao enviar e-mail:s*/i, "").slice(0, 300), from: senderAddress() }
     }
     await db.update(invitations).set({ revokedAt: new Date() }).where(eq(invitations.id, invitation.id))
     throw e

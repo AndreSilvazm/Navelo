@@ -11,6 +11,12 @@ export type SendInput = EmailContent & {
   sender?: SenderName
 }
 
+/** Endereço de remetente em uso (o EMAIL_FROM, se existir, manda): só o endereço, para exibir. */
+export function senderAddress(sender: SenderName = "sistema"): string {
+  const bruto = process.env.EMAIL_FROM || SENDERS[sender].from
+  return /<([^>]+)>/.exec(bruto)?.[1] ?? bruto
+}
+
 /**
  * Envia pelo Resend. O domínio navelo.com.br já está verificado lá; em desenvolvimento o
  * provedor só entrega ao dono da conta, então o conteúdo vai para o terminal em vez de falhar.
