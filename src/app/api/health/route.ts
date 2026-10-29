@@ -5,6 +5,7 @@ import { APP_ENV, IS_PRODUCTION } from "@/lib/app-env"
 import { describeError } from "@/lib/diagnose"
 import { senderAddress } from "@/lib/email/send"
 import { getAuthSecret } from "@/lib/env"
+import { storageStatus } from "@/lib/storage"
 
 // Sempre sob demanda: o resultado depende das variáveis do servidor em execução, não do build.
 export const dynamic = "force-dynamic"
@@ -60,8 +61,14 @@ export async function GET() {
     }
   }
 
+  // storage dos arquivos (documentos e notas): se está ligado, o bucket precisa existir e a chave valer
+  const armazenamento = await limite(storageStatus(), 8000).catch(() => ({ enabled: true, ok: false, detail: "sem resposta do storage" }))
+  if (armazenamento.enabled) checks.storage = armazenamento.ok ? ok : falhou(armazenamento.detail ?? "falhou")
+
   // avisos: não derrubam o serviço, mas explicam falhas que aparecem só sob carga ou em e-mail
   const avisos: string[] = []
+  if (!armazenamento.enabled) avisos.push("Storage desligado (faltam SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY): os arquivos ficam dentro do banco")
+  if (armazenamento.enabled && armazenamento.ok && armazenamento.detail) avisos.push(armazenamento.detail)
   if (!process.env.RESEND_API_KEY) avisos.push("RESEND_API_KEY ausente: nenhum e-mail sai (em teste o convite mostra o link na tela; em produção o convite é desfeito)")
   if (APP_ENV !== "development") {
     for (const nome of ["DATABASE_URL", "DATABASE_ADMIN_URL"] as const) {

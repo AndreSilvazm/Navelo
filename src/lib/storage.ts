@@ -45,9 +45,30 @@ export function invoicePath(companyId: string, collaboratorId: string, invoiceId
 }
 
 export async function putFile(path: string, bytes: Buffer, contentType: string) {
-  const { error } = await storage().upload(path, bytes, { contentType, upsert: true })
-  if (error) throw new Error(`Falha ao guardar o arquivo: ${error.message}`)
+  let { error } = await storage().upload(path, bytes, { contentType, upsert: true })
+  // bucket ainda não criado neste projeto: cria (privado) e tenta de novo, uma vez
+  if (error && /bucket not found|not found/i.test(error.message)) {
+    await ensureBucket()
+    ;({ error } = await storage().upload(path, bytes, { contentType, upsert: true }))
+  }
+  if (error) throw new Error(`Falha ao guardar o arquivo no storage: ${error.message}`)
   return path
+}
+
+/** Para o /api/health: o storage está configurado e o bucket existe? Nunca devolve a chave. */
+export async function storageStatus(): Promise<{ enabled: boolean; ok?: boolean; detail?: string }> {
+  if (!storageEnabled()) return { enabled: false }
+  try {
+    client ??= createClient(SUPABASE_URL!, SERVICE_KEY!, { auth: { persistSession: false } })
+    const { data, error } = await client.storage.getBucket(BUCKET)
+    if (data) return { enabled: true, ok: true, detail: data.public ? "bucket PÚBLICO (deveria ser privado)" : undefined }
+    const msg = error?.message ?? ""
+    if (/not found/i.test(msg)) return { enabled: true, ok: false, detail: `o bucket "${BUCKET}" não existe (é criado no primeiro envio, ou rode npm run files:migrate -- --apply)` }
+    if (/invalid|jwt|unauthor|api key|forbidden|401|403/i.test(msg)) return { enabled: true, ok: false, detail: "chave do Supabase recusada (SUPABASE_SERVICE_ROLE_KEY de outro projeto ou inválida?)" }
+    return { enabled: true, ok: false, detail: msg.slice(0, 160) || "erro ao consultar o storage" }
+  } catch (e) {
+    return { enabled: true, ok: false, detail: e instanceof Error ? e.message.slice(0, 160) : "erro ao consultar o storage" }
+  }
 }
 
 export async function getFile(path: string): Promise<Buffer> {

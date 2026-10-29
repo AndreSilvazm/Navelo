@@ -8,6 +8,8 @@ import { db } from "@/db"
 import { contractCollaborators, contracts, invoices } from "@/db/schema"
 import { MAX_FILE_BYTES, detectMimeType, requireActiveCollaborator } from "@/lib/collaborators"
 import { parseBRLToCents } from "@/lib/format"
+import { IS_PRODUCTION } from "@/lib/app-env"
+import { describeError } from "@/lib/diagnose"
 import { invoicePath, putFile, removeFile, storageEnabled } from "@/lib/storage"
 
 export type InvoiceState = { error?: string } | undefined
@@ -61,7 +63,14 @@ export async function createInvoice(_: InvoiceState, formData: FormData): Promis
   // não estiver configurado)
   const id = randomUUID()
   const caminho = storageEnabled() ? invoicePath(session.company.id, collaborator.id, id, mimeType) : null
-  if (caminho) await putFile(caminho, content, mimeType)
+  if (caminho) {
+    try {
+      await putFile(caminho, content, mimeType)
+    } catch (e) {
+      console.error("enviar nota: storage", e)
+      return { error: IS_PRODUCTION ? "Não foi possível guardar o arquivo da nota. Tente novamente em instantes." : `Não foi possível guardar o arquivo da nota: ${describeError(e)}` }
+    }
+  }
 
   try {
     await db.insert(invoices).values({

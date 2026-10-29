@@ -10,7 +10,9 @@ import { UFS } from "@/lib/br-states"
 import { isValidCnpj, onlyDigits } from "@/lib/cnpj"
 import { COMPANY_FIELDS, fetchCompanyProfile } from "@/lib/cnpj-lookup"
 import { syncBankData } from "@/lib/collaborator-join"
-import { documentPath, putFile, storageEnabled } from "@/lib/storage"
+import { IS_PRODUCTION } from "@/lib/app-env"
+import { describeError } from "@/lib/diagnose"
+import { documentPath, putFile, removeFile, storageEnabled } from "@/lib/storage"
 import {
   MAX_FILE_BYTES,
   detectMimeType,
@@ -164,42 +166,55 @@ export async function submitDocuments(_: FormState, formData: FormData): Promise
 
   // sobe os arquivos para o bucket antes de gravar: se algum falhar, nada é registrado
   const enviados = new Map<string, string>()
-  if (storageEnabled()) {
-    for (const s of staged) {
-      const caminho = documentPath(collaborator.companyId, collaborator.id, s.requirementId, s.mimeType)
-      await putFile(caminho, s.content, s.mimeType)
-      enviados.set(s.requirementId, caminho)
+  try {
+    if (storageEnabled()) {
+      for (const s of staged) {
+        const caminho = documentPath(collaborator.companyId, collaborator.id, s.requirementId, s.mimeType)
+        await putFile(caminho, s.content, s.mimeType)
+        enviados.set(s.requirementId, caminho)
+      }
     }
+  } catch (e) {
+    console.error("submitDocuments: storage", e)
+    for (const caminho of enviados.values()) await removeFile(caminho) // não deixa arquivo órfão
+    // fora de produção a tela mostra a causa; em produção, uma mensagem genérica
+    return { error: IS_PRODUCTION ? "Não foi possível guardar os arquivos. Tente novamente em instantes." : `Não foi possível guardar os arquivos: ${describeError(e)}` }
   }
 
-  await db.transaction(async (tx) => {
-    for (const s of staged) {
-      const caminho = enviados.get(s.requirementId) ?? null
-      const data = {
-        fileName: s.fileName,
-        mimeType: s.mimeType,
-        sizeBytes: s.content.length,
-        storagePath: caminho,
-        content: caminho ? null : s.content,
-        status: "submitted" as const,
-        reviewNote: null,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        uploadedAt: new Date(),
+  try {
+    await db.transaction(async (tx) => {
+      for (const s of staged) {
+        const caminho = enviados.get(s.requirementId) ?? null
+        const data = {
+          fileName: s.fileName,
+          mimeType: s.mimeType,
+          sizeBytes: s.content.length,
+          storagePath: caminho,
+          content: caminho ? null : s.content,
+          status: "submitted" as const,
+          reviewNote: null,
+          reviewedAt: null,
+          reviewedByUserId: null,
+          uploadedAt: new Date(),
+        }
+        await tx
+          .insert(collaboratorDocuments)
+          .values({ collaboratorId: collaborator.id, requirementId: s.requirementId, ...data })
+          .onConflictDoUpdate({
+            target: [collaboratorDocuments.collaboratorId, collaboratorDocuments.requirementId],
+            set: data,
+          })
       }
       await tx
-        .insert(collaboratorDocuments)
-        .values({ collaboratorId: collaborator.id, requirementId: s.requirementId, ...data })
-        .onConflictDoUpdate({
-          target: [collaboratorDocuments.collaboratorId, collaboratorDocuments.requirementId],
-          set: data,
-        })
-    }
-    await tx
-      .update(collaborators)
-      .set({ status: "in_review", submittedAt: new Date() })
-      .where(and(eq(collaborators.id, collaborator.id), eq(collaborators.status, "documents_pending")))
-  })
+        .update(collaborators)
+        .set({ status: "in_review", submittedAt: new Date() })
+        .where(and(eq(collaborators.id, collaborator.id), eq(collaborators.status, "documents_pending")))
+    })
+  } catch (e) {
+    console.error("submitDocuments: banco", e)
+    for (const caminho of enviados.values()) await removeFile(caminho)
+    return { error: IS_PRODUCTION ? "Não foi possível registrar os documentos. Tente novamente em instantes." : `Não foi possível registrar os documentos: ${describeError(e)}` }
+  }
 
   revalidatePath("/app/colaboradores")
   redirect("/portal/primeiro-acesso")
