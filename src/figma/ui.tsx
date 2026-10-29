@@ -5,7 +5,7 @@ import { masks, type MaskName } from "@/lib/masks"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-export type IconName = "activity" | "arrow" | "bell" | "briefcase" | "calendar" | "check" | "chevron" | "clock" | "close" | "contract" | "dashboard" | "document" | "download" | "filter" | "gear" | "grid" | "lock" | "logout" | "mail" | "menu" | "more" | "payment" | "people" | "plus" | "report" | "search" | "shield" | "upload"
+export type IconName = "activity" | "arrow" | "bell" | "briefcase" | "calendar" | "check" | "chevron" | "clock" | "close" | "contract" | "dashboard" | "document" | "download" | "filter" | "gear" | "grid" | "lock" | "logout" | "mail" | "menu" | "more" | "payment" | "people" | "plus" | "report" | "search" | "shield" | "upload" | "eye" | "eye-off"
 
 const iconPaths: Record<IconName, ReactNode> = {
   close: <path d="M6 6l12 12M18 6 6 18" />,
@@ -83,6 +83,19 @@ const iconPaths: Record<IconName, ReactNode> = {
     <>
       <path d="M4 5h16M4 12h16M4 19h16" />
       <path d="M9 5v14M16 5v14" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="M3 3l18 18" />
+      <path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 4.4-1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
     </>
   ),
   lock: (
@@ -547,6 +560,10 @@ export function TextField({
   type?: string
   value?: string
 }) {
+  // campo de senha: o olhinho alterna entre oculto e visível
+  const [shown, setShown] = useState(false)
+  const isPassword = type === "password"
+
   return (
     <label className={`field ${error ? "field-error" : ""}`}>
       {label && <span className="field-label">{label}</span>}
@@ -567,9 +584,24 @@ export function TextField({
           placeholder={placeholder}
           readOnly={readOnly}
           required={required}
-          type={type}
+          type={isPassword && shown ? "text" : type}
           value={value}
+          {...(isPassword ? { autoCapitalize: "none", spellCheck: false } : {})}
         />
+        {isPassword && (
+          <button
+            aria-label={shown ? "Ocultar senha" : "Mostrar senha"}
+            aria-pressed={shown}
+            className="field-toggle"
+            // não tira o foco do campo ao clicar
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setShown((v) => !v)}
+            title={shown ? "Ocultar senha" : "Mostrar senha"}
+            type="button"
+          >
+            <Icon name={shown ? "eye-off" : "eye"} size={18} />
+          </button>
+        )}
       </span>
       {error && <span className="field-message">{error}</span>}
       {hint && !error && <span className="form-hint">{hint}</span>}

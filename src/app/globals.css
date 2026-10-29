@@ -262,6 +262,10 @@ strong { font-weight: 600; }
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 .field-control:hover { border-color: #b6c2d3; }
+/* olhinho do campo de senha */
+.field-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-right: -6px; border: 0; border-radius: 8px; background: transparent; color: var(--zn-gray-2, #8a97ab); cursor: pointer; transition: color .15s ease, background-color .15s ease; }
+.field-toggle:hover { color: var(--zn-primary-strong); background: var(--zn-primary-tint); }
+.field-toggle:focus-visible { outline: 2px solid var(--zn-primary); outline-offset: 1px; }
 .field-control:focus-within { border-color: var(--zn-primary); box-shadow: var(--focus-ring); }
 .field-control input, .field-control select { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: var(--fs-base); }
 .field-control input::placeholder, .textarea::placeholder { color: #8a97ab; }
