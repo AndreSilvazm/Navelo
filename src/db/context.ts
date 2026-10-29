@@ -1,7 +1,6 @@
 import "server-only"
 import { getSession } from "@/lib/auth/session"
-
-export type DbContext = { userId: string; companyId: string; role: string; membershipId: string }
+import type { DbContext } from "./scope"
 
 /**
  * Quem está agindo nesta requisição, no formato que as políticas de RLS esperam. Sai da sessão
