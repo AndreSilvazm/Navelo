@@ -7,6 +7,9 @@ export function describeError(error: unknown): string {
   const e = error as { code?: string; message?: string; cause?: { message?: string; code?: string } }
   const texto = `${e?.message ?? ""} ${e?.cause?.message ?? ""} ${e?.code ?? ""} ${e?.cause?.code ?? ""}`
 
+  // erro do Storage (arquivos): a mensagem já vem pronta e sem segredo, e NÃO é erro do banco
+  if (/no storage|do storage|do Storage|SUPABASE_SERVICE_ROLE_KEY|criar o bucket/i.test(texto)) return (e?.message ?? "erro no storage").replace(/\s+/g, " ").slice(0, 400)
+
   if (/28P01|password authentication failed/i.test(texto)) return "usuário ou senha do banco recusados"
   if (/tenant or user not found|user not found|ENOIDENTIFIER|no tenant identifier|XX000/i.test(texto)) return "usuário ou projeto do banco não reconhecido (o usuário precisa terminar em .<ref-do-projeto>)"
   if (/max clients|MaxClients|EMAXCONNSESSION|too many (connections|clients)|53300/i.test(texto)) return "limite de conexões do banco atingido (use a porta 6543, modo transação)"
