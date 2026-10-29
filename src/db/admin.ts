@@ -1,6 +1,7 @@
 import "server-only"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
+import { poolOptions } from "./pool"
 import * as schema from "./schema"
 
 /**
@@ -14,7 +15,7 @@ import * as schema from "./schema"
  */
 const globalForDb = globalThis as unknown as { pgAdmin?: postgres.Sql }
 
-const client = globalForDb.pgAdmin ?? postgres((process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL)!, { max: 5 })
+const client = globalForDb.pgAdmin ?? postgres((process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL)!, poolOptions("admin"))
 if (process.env.NODE_ENV !== "production") globalForDb.pgAdmin = client
 
 export const dbAdmin = drizzle(client, { schema })

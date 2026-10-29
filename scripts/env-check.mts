@@ -10,7 +10,7 @@ const paraDev = process.argv.includes("--dev")
 const env = readActiveEnv()
 const problemas = blockingProblems(env)
 
-const url = env.values.DATABASE_MIGRATE_URL ?? env.values.DATABASE_URL
+const url = env.values.DATABASE_MIGRATE_URL || env.values.DATABASE_URL
 const projeto = projectOf(url)
 console.log(`\nAmbiente ativo em ${ENV_FILE}: ${env.appEnv ? LABEL[env.appEnv] : "DESCONHECIDO"}`)
 if (projeto) console.log(`Banco: projeto ${projeto.ref} (${projeto.host})`)

@@ -72,10 +72,19 @@ export async function GET() {
     }
   }
 
+  // avisos: não derrubam o serviço, mas explicam falhas que aparecem só sob carga ou em e-mail
+  const avisos: string[] = []
+  if (!process.env.RESEND_API_KEY) avisos.push("RESEND_API_KEY ausente: nenhum e-mail sai (em teste o convite mostra o link na tela; em produção o convite é desfeito)")
+  if (APP_ENV !== "development") {
+    for (const nome of ["DATABASE_URL", "DATABASE_ADMIN_URL"] as const) {
+      if (process.env[nome]?.includes(":5432/")) avisos.push(`${nome} usa a porta 5432 (modo sessão, só 15 vagas no pooler): troque para 6543 (modo transação), senão novas conexões são recusadas sob uso`)
+    }
+  }
+
   const tudoCerto = Object.values(checks).every((c) => c.status === "ok")
   const headers = { "Cache-Control": "no-store" }
   const status = tudoCerto ? 200 : 503
 
   if (IS_PRODUCTION) return Response.json({ ok: tudoCerto }, { status, headers })
-  return Response.json({ ok: tudoCerto, ambiente: APP_ENV, checks }, { status, headers })
+  return Response.json({ ok: tudoCerto, ambiente: APP_ENV, checks, avisos }, { status, headers })
 }

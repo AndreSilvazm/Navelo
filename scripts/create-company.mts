@@ -14,7 +14,7 @@ import { generateToken, hashToken, normalizeEmail } from "../src/lib/auth/tokens
 
 config({ path: ".env.local" })
 // operação de sistema: usa o admin quando existe
-const DB_URL = (process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL)!
+const DB_URL = (process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL)!
 
 const INVITE_TTL_DAYS = 7
 

@@ -3,7 +3,9 @@ import { eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { dbAdmin } from "@/db/admin"
 import { companies, invitations, users, type MembershipRole } from "@/db/schema"
+import { IS_PRODUCTION } from "@/lib/app-env"
 import { sendInvitationEmail } from "@/lib/email"
+import { getAppUrl } from "@/lib/env"
 import { generateToken, hashToken, legacyHashToken, normalizeEmail } from "./tokens"
 
 export type InvitationLookup =
@@ -79,9 +81,9 @@ export async function createInvitation(input: {
     })
     .returning({ id: invitations.id })
 
-  const inviteUrl = `${process.env.APP_URL}/convite/${token}`
+  const inviteUrl = `${getAppUrl()}/convite/${token}`
   try {
-    await sendInvitationEmail({
+    const emailSent = await sendInvitationEmail({
       to: normalizeEmail(input.email),
       name: input.name,
       companyName: company.tradeName ?? company.legalName,
@@ -90,15 +92,16 @@ export async function createInvitation(input: {
       inviteUrl,
       expiresInDays: INVITE_TTL_DAYS,
     })
+    return { inviteUrl, emailSent }
   } catch (e) {
-    // Em desenvolvimento o Resend fica em modo de teste (só entrega ao dono da conta):
-    // mantém o convite e devolve o link para ser compartilhado na mão.
-    if (process.env.NODE_ENV !== "production") {
+    // Fora de produção (desenvolvimento e staging) o e-mail pode não estar configurado, ou o
+    // provedor estar em modo de teste: o convite fica criado e o link é mostrado na tela para ser
+    // passado na mão. Em produção, sem e-mail o convite não chega a ninguém: é desfeito.
+    if (!IS_PRODUCTION) {
       console.warn("E-mail de convite não enviado:", e instanceof Error ? e.message : e)
       return { inviteUrl, emailSent: false }
     }
     await db.update(invitations).set({ revokedAt: new Date() }).where(eq(invitations.id, invitation.id))
     throw e
   }
-  return { inviteUrl, emailSent: true }
 }

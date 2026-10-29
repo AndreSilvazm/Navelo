@@ -11,7 +11,7 @@ import { collaborators, companies, documentRequirements, memberships, users } fr
 import { hashPassword } from "../src/lib/auth/password"
 
 config({ path: ".env.local" })
-const DB_URL = (process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL)!
+const DB_URL = (process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL)!
 
 if (process.env.NODE_ENV === "production" || process.env.APP_ENV === "production") throw new Error("seed:dev não roda em produção")
 

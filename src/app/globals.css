@@ -1521,7 +1521,7 @@ a.table-person:hover strong { color: var(--zn-primary-strong); }
 }
 
 /* Modal (ReasonDialog) */
-.modal { width: min(520px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: var(--radius-xl); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
+.modal { width: min(520px, calc(100vw - 32px)); margin: auto; padding: 0; border: 0; border-radius: var(--radius-xl); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
 .modal::backdrop { background: rgba(16, 23, 34, .5); backdrop-filter: blur(2px); }
 .modal-body { display: grid; gap: 16px; padding: 24px; }
 .modal-body > div > strong { font-size: var(--fs-xl); }

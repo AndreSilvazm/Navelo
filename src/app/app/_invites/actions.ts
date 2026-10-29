@@ -87,7 +87,7 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
   return {
     success: result.emailSent
       ? `Convite enviado para ${email}.`
-      : `Convite criado, mas o e-mail não foi enviado (provedor em modo de teste). Link para compartilhar: ${result.inviteUrl}`,
+      : `Convite criado, mas o e-mail não foi enviado (e-mail não configurado ou provedor em modo de teste). Link para compartilhar: ${result.inviteUrl}`,
   }
 }
 

@@ -2,12 +2,13 @@ import "server-only"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import { resolveDbContext, type DbContext } from "./context"
+import { poolOptions } from "./pool"
 import * as schema from "./schema"
 
 const globalForDb = globalThis as unknown as { pg?: postgres.Sql }
 
 // Reaproveita a conexão entre os hot reloads do `next dev`
-const client = globalForDb.pg ?? postgres(process.env.DATABASE_URL!, { max: 10 })
+const client = globalForDb.pg ?? postgres(process.env.DATABASE_URL!, poolOptions("app"))
 if (process.env.NODE_ENV !== "production") globalForDb.pg = client
 
 /**

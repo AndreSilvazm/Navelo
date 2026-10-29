@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { PageHeading } from "@/figma/ui"
 import { requireSession } from "@/lib/auth/session"
 import { CollaboratorInvites } from "./collaborator-invites"
+import { InviteDialog } from "./invite-dialog"
 import { CollaboratorsView } from "./collaborator-list"
 import { CollaboratorTabs } from "./collaborator-tabs"
 import { getCollaboratorListData, getTabCounts } from "./queries"
@@ -22,6 +23,7 @@ export default async function CollaboratorsPage({
 
   const heading = (
     <PageHeading
+      action={<InviteDialog />}
       subtitle="Acompanhe quem está em análise, quem está ativo e convide novos colaboradores."
       title="Colaboradores"
     />

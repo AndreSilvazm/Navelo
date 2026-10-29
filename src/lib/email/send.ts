@@ -15,7 +15,7 @@ export type SendInput = EmailContent & {
  * Envia pelo Resend. O domínio navelo.com.br já está verificado lá; em desenvolvimento o
  * provedor só entrega ao dono da conta, então o conteúdo vai para o terminal em vez de falhar.
  */
-export async function sendEmail(input: SendInput): Promise<void> {
+export async function sendEmail(input: SendInput): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
   const { from, replyTo } = SENDERS[input.sender ?? "sistema"]
   const { html, text } = renderEmail(input)
@@ -23,7 +23,7 @@ export async function sendEmail(input: SendInput): Promise<void> {
   if (!apiKey) {
     if (process.env.NODE_ENV === "production") throw new Error("RESEND_API_KEY não configurada")
     console.warn(`[e-mail não enviado: sem RESEND_API_KEY] para ${input.to}: ${input.subject}\n${text}`)
-    return
+    return false
   }
 
   const { error } = await new Resend(apiKey).emails.send({
@@ -38,6 +38,7 @@ export async function sendEmail(input: SendInput): Promise<void> {
     headers: { "X-Entity-Ref-ID": crypto.randomUUID() }, // evita o agrupamento da Gmail
   })
   if (error) throw new Error(`Falha ao enviar e-mail: ${error.message}`)
+  return true
 }
 
 /**

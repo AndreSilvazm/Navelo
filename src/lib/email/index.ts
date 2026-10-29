@@ -35,7 +35,8 @@ export async function sendInvitationEmail(input: {
   expiresInDays: number
 }) {
   const como = input.jobTitle ? `para o cargo de ${input.jobTitle}` : `como ${papel[input.role] ?? input.role}`
-  await sendEmail({
+  // true se o e-mail saiu; false se só foi registrado no log (sem chave, fora de produção)
+  return sendEmail({
     to: input.to,
     sender: "sistema",
     subject: `${input.companyName} convidou você para o Navelo`,

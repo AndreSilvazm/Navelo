@@ -37,7 +37,7 @@ if (ambiente.appEnv === "production") {
   }
 }
 
-const ownerUrl = process.env.DATABASE_MIGRATE_URL ?? process.env.DATABASE_URL
+const ownerUrl = process.env.DATABASE_MIGRATE_URL || process.env.DATABASE_URL
 const appPassword = process.env.NAVELO_APP_PASSWORD
 const adminPassword = process.env.NAVELO_ADMIN_PASSWORD
 
@@ -56,15 +56,22 @@ const seguro = (valor: string) => {
 async function papel(nome: string, senha: string, opcoes: string) {
   const [existe] = await sql`select 1 from pg_roles where rolname = ${nome}`
   const clausula = `login nosuperuser nocreatedb nocreaterole noreplication ${opcoes} password '${seguro(senha)}'`
-  await sql.unsafe(existe ? `alter role ${nome} with ${clausula}` : `create role ${nome} with ${clausula}`)
+  if (existe) {
+    // papel que já existe: muda só senha e limite. O provedor recusa ALTER com SUPERUSER/BYPASSRLS na
+    // cláusula (mesmo repetindo o valor atual), e esses atributos são definidos na criação.
+    const limite = /connection limit (d+)/.exec(opcoes)?.[1]
+    await sql.unsafe(`alter role ${nome} with login ${limite ? `connection limit ${limite} ` : ""}password '${seguro(senha)}'`)
+  } else {
+    await sql.unsafe(`create role ${nome} with ${clausula}`)
+  }
   return existe ? "atualizado" : "criado"
 }
 
 try {
   // o app nunca ignora o RLS e tem teto de conexões
-  console.log("navelo_app:  ", await papel("navelo_app", appPassword, "nobypassrls connection limit 25"))
+  console.log("navelo_app:  ", await papel("navelo_app", appPassword, "nobypassrls connection limit 15"))
   // o admin ignora o RLS (precisa, para funcionar antes da sessão) e também tem teto
-  const admin = await papel("navelo_admin", adminPassword, "bypassrls connection limit 10").catch(async (erro) => {
+  const admin = await papel("navelo_admin", adminPassword, "bypassrls connection limit 15").catch(async (erro) => {
     // em alguns provedores só superusuário concede BYPASSRLS
     console.warn("BYPASSRLS recusado:", erro instanceof Error ? erro.message : erro)
     throw erro
