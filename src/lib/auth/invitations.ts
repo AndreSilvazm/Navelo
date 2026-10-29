@@ -63,6 +63,8 @@ export async function createInvitation(input: {
   role: MembershipRole
   jobTitle?: string
   invitedByUserId: string
+  /** nome de quem da empresa está convidando (aparece no e-mail) */
+  invitedByName?: string
 }) {
   const [company] = await db.select().from(companies).where(eq(companies.id, input.companyId)).limit(1)
   if (!company || company.status !== "active") throw new Error("Empresa inválida")
@@ -90,6 +92,7 @@ export async function createInvitation(input: {
       companyName: company.tradeName ?? company.legalName,
       role: input.role,
       jobTitle: input.jobTitle,
+      invitedByName: input.invitedByName,
       inviteUrl,
       expiresInDays: INVITE_TTL_DAYS,
     })

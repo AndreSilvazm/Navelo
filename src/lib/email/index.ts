@@ -24,31 +24,55 @@ export function bankFacts(conta: { banco?: string | null; agencia?: string | nul
 
 // ---------------------------------------------------------------- acesso
 
-/** Convite para entrar na plataforma (colaborador ou equipe da empresa) */
+/**
+ * Convite para entrar na plataforma. Quem convida é a EMPRESA (o Navelo é só a plataforma que ela
+ * usa): o nome dela vai no remetente, no assunto, no título e numa tabela com os dados do convite.
+ * Exceção: o convite do proprietário de uma empresa nova vem do próprio Navelo, que a cadastrou.
+ */
 export async function sendInvitationEmail(input: {
   to: string
   name?: string | null
   companyName: string
   role: string
   jobTitle?: string | null
+  /** quem da empresa enviou o convite */
+  invitedByName?: string | null
   inviteUrl: string
   expiresInDays: number
 }) {
+  const cadastro = input.role === "owner" // empresa nova, cadastrada pela equipe do Navelo
   const como = input.jobTitle ? `para o cargo de ${input.jobTitle}` : `como ${papel[input.role] ?? input.role}`
+  const fatos: EmailFact[] = [{ label: "Empresa", value: input.companyName }]
+  if (input.jobTitle) fatos.push({ label: "Cargo", value: input.jobTitle })
+  else fatos.push({ label: "Papel", value: papel[input.role] ?? input.role })
+  if (input.invitedByName && !cadastro) fatos.push({ label: "Convite enviado por", value: input.invitedByName })
+
   // true se o e-mail saiu; false se só foi registrado no log (sem chave, fora de produção)
   return sendEmail({
     to: input.to,
     sender: "sistema",
-    subject: `${input.companyName} convidou você para o Navelo`,
-    preheader: `Finalize seu acesso ${como}. O link vale ${input.expiresInDays} dias.`,
-    heading: "Você foi convidado",
+    fromName: cadastro ? undefined : `${input.companyName} via Navelo`,
+    subject: cadastro ? `A ${input.companyName} foi cadastrada no Navelo` : `${input.companyName} convidou você para o Navelo`,
+    preheader: cadastro
+      ? `Crie o seu acesso de proprietário. O link vale ${input.expiresInDays} dias.`
+      : `${input.companyName} convidou você ${como}. O link vale ${input.expiresInDays} dias.`,
+    heading: cadastro ? `${input.companyName} está no Navelo` : `${input.companyName} convidou você`,
     greeting: greet(input.name),
-    paragraphs: [
-      `**${input.companyName}** convidou você para o Navelo ${como}.`,
-      "O Navelo reúne contrato, documentos e notas fiscais em um lugar só. Para começar, crie seu acesso no botão abaixo.",
-    ],
+    paragraphs: cadastro
+      ? [
+          `A **${input.companyName}** foi cadastrada no Navelo e você é o proprietário da conta.`,
+          "Crie o seu acesso no botão abaixo para começar a convidar a equipe e os colaboradores.",
+        ]
+      : [
+          `**${input.companyName}** convidou você para acessar o Navelo, a plataforma que ela usa para acompanhar contratos, documentos e notas fiscais dos colaboradores PJ.`,
+          "Para começar, crie o seu acesso no botão abaixo. Você mesmo define a sua senha.",
+        ],
+    factsTitle: "Dados do convite",
+    facts: fatos,
     button: { label: "Aceitar convite", url: input.inviteUrl },
-    note: `O link vale por ${input.expiresInDays} dias e só pode ser usado uma vez. Se você não esperava este convite, ignore este e-mail.`,
+    note: cadastro
+      ? `O link vale por ${input.expiresInDays} dias e só pode ser usado uma vez.`
+      : `O convite é da **${input.companyName}**: o Navelo apenas entrega a mensagem. O link vale por ${input.expiresInDays} dias e só pode ser usado uma vez. Se você não conhece essa empresa ou não esperava este convite, ignore este e-mail.`,
   })
 }
 

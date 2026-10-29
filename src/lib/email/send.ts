@@ -7,8 +7,18 @@ import { SENDERS, type SenderName } from "./senders"
 export type SendInput = EmailContent & {
   to: string
   subject: string
+  /** nome que aparece como remetente (ex.: "Acme via Navelo"); o endereço continua sendo o do Navelo */
+  fromName?: string
   /** quem assina: sistema (padrão), suporte ou segurança */
   sender?: SenderName
+}
+
+/**
+ * Nome de exibição seguro para o cabeçalho From: tira aspas, <>, barras e quebras de linha (que
+ * poderiam forjar outro remetente ou outro cabeçalho) e limita o tamanho.
+ */
+export function safeDisplayName(name: string): string {
+  return name.replace(/[\u0000-\u001f\u007f"<>@\x5c]/g, " ").replace(/\s+/g, " ").trim().slice(0, 70)
 }
 
 /** Endereço de remetente em uso (o EMAIL_FROM, se existir, manda): só o endereço, para exibir. */
@@ -23,7 +33,10 @@ export function senderAddress(sender: SenderName = "sistema"): string {
  */
 export async function sendEmail(input: SendInput): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
-  const { from, replyTo } = SENDERS[input.sender ?? "sistema"]
+  const { from: padrao, replyTo } = SENDERS[input.sender ?? "sistema"]
+  // com fromName o remetente mostra a empresa; o endereço continua o do Navelo (o domínio verificado)
+  const nome = input.fromName ? safeDisplayName(input.fromName) : ""
+  const from = nome ? `${nome} <${/<([^>]+)>/.exec(padrao)?.[1] ?? padrao}>` : padrao
   const { html, text } = renderEmail(input)
 
   if (!apiKey) {
@@ -34,7 +47,7 @@ export async function sendEmail(input: SendInput): Promise<boolean> {
 
   const { error } = await new Resend(apiKey).emails.send({
     // EMAIL_FROM continua valendo como atalho em ambiente de teste
-    from: process.env.EMAIL_FROM || from,
+    from: process.env.EMAIL_FROM ? (nome ? `${nome} <${senderAddress(input.sender)}>` : process.env.EMAIL_FROM) : from,
     to: input.to,
     replyTo,
     // fora de produção o assunto avisa: ninguém confunde um teste com um aviso de verdade

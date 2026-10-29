@@ -77,6 +77,7 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
       role,
       jobTitle: role === "collaborator" ? jobTitle : undefined,
       invitedByUserId: session.user.id,
+      invitedByName: session.user.name,
     })
 
     revalidateInvitePages()
@@ -143,6 +144,7 @@ export async function resendInvitation(invitationId: string) {
     role: old.role,
     jobTitle: old.jobTitle ?? undefined,
     invitedByUserId: session.user.id,
+    invitedByName: session.user.name,
   })
   revalidateInvitePages()
 }
