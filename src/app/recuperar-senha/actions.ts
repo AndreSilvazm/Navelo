@@ -9,7 +9,7 @@ import { hashPassword, validatePassword } from "@/lib/auth/password"
 import { RESET_TTL_MINUTES } from "@/lib/auth/password-rules"
 import { generateToken, hashToken, normalizeEmail } from "@/lib/auth/tokens"
 import { sendPasswordChangedEmail, sendPasswordResetEmail } from "@/lib/email"
-import { APP_URL } from "@/lib/env"
+import { getAppUrl } from "@/lib/env"
 import { audit } from "@/lib/audit"
 import { clientIp, consumeRateLimit, minutesLabel } from "@/lib/rate-limit"
 
@@ -64,14 +64,14 @@ export async function requestPasswordReset(_: RequestState, formData: FormData):
     await sendPasswordResetEmail({
       to: user.email,
       name: user.name,
-      resetUrl: `${APP_URL}/recuperar-senha/${token}`,
+      resetUrl: `${getAppUrl()}/recuperar-senha/${token}`,
       expiresInMinutes: RESET_TTL_MINUTES,
     })
   } catch (error) {
     // Em desenvolvimento o Resend só entrega ao dono da conta: o link fica no terminal.
     if (process.env.NODE_ENV !== "production") {
       console.warn("E-mail de troca de senha não enviado:", error instanceof Error ? error.message : error)
-      console.warn(`Link para trocar a senha: ${APP_URL}/recuperar-senha/${token}`)
+      console.warn(`Link para trocar a senha: ${getAppUrl()}/recuperar-senha/${token}`)
       return SENT
     }
     throw error

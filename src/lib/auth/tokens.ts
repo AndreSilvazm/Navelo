@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto"
-import { AUTH_SECRET } from "@/lib/env"
+import { getAuthSecret } from "@/lib/env"
 
 // Token opaco que vai no link do convite / cookie de sessão. No banco fica só o hash.
 export function generateToken() {
@@ -9,7 +9,7 @@ export function generateToken() {
 // HMAC com o segredo do servidor: uma cópia do banco não basta para forjar um token válido,
 // porque o segredo não está lá.
 export function hashToken(token: string) {
-  return createHmac("sha256", AUTH_SECRET).update(token).digest("hex")
+  return createHmac("sha256", getAuthSecret()).update(token).digest("hex")
 }
 
 // Formato antigo (sha256 puro), usado só para aceitar convites criados antes do AUTH_SECRET.

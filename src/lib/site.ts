@@ -1,7 +1,20 @@
 import { IS_PRODUCTION } from "./app-env"
 
 // Endereço público do site (usado em metadados, sitemap e links absolutos).
-export const SITE_URL = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")
+// Vazio ou inválido conta como ausente: num build sem a variável o site não pode quebrar.
+function resolveSiteUrl() {
+  const raw = process.env.APP_URL?.trim()
+  if (raw) {
+    try {
+      return new URL(raw).origin
+    } catch {
+      /* cai no padrão abaixo */
+    }
+  }
+  return "http://localhost:3000"
+}
+
+export const SITE_URL = resolveSiteUrl()
 
 /** Prefixo do título da aba fora de produção, para ninguém confundir os ambientes */
 export const TITLE_PREFIX = IS_PRODUCTION ? "" : "[Teste] "
