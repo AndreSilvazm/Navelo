@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation"
 import { eq, sql } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { users } from "@/db/schema"
 import { getPendingInvites } from "@/lib/portal-companies"
 import { listAccesses, needsChoice } from "@/lib/auth/accesses"

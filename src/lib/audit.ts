@@ -1,7 +1,7 @@
 import "server-only"
 import { headers } from "next/headers"
 import { isIP } from "node:net"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { auditEvents } from "@/db/schema"
 import type { AuthSession } from "@/lib/auth/session"
 

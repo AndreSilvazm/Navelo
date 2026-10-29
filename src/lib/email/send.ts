@@ -1,5 +1,6 @@
 import "server-only"
 import { Resend } from "resend"
+import { IS_PRODUCTION } from "@/lib/app-env"
 import { renderEmail, type EmailContent } from "./layout"
 import { SENDERS, type SenderName } from "./senders"
 
@@ -30,7 +31,8 @@ export async function sendEmail(input: SendInput): Promise<void> {
     from: process.env.EMAIL_FROM || from,
     to: input.to,
     replyTo,
-    subject: input.subject,
+    // fora de produção o assunto avisa: ninguém confunde um teste com um aviso de verdade
+    subject: IS_PRODUCTION ? input.subject : `[TESTE] ${input.subject}`,
     html,
     text,
     headers: { "X-Entity-Ref-ID": crypto.randomUUID() }, // evita o agrupamento da Gmail

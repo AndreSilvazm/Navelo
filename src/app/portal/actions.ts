@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { and, eq, gt, isNull, sql } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { companies, invitations, memberships } from "@/db/schema"
 import { getSession, requireSession, setSessionAccess } from "@/lib/auth/session"
 import { joinAsCollaborator } from "@/lib/collaborator-join"

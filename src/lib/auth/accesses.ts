@@ -1,6 +1,6 @@
 import "server-only"
 import { and, asc, eq } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { companies, memberships, type MembershipRole } from "@/db/schema"
 import { isCorporateRole } from "./session"
 

@@ -11,6 +11,7 @@ import { collaborators, companies, documentRequirements, memberships, users } fr
 import { hashPassword } from "../src/lib/auth/password"
 
 config({ path: ".env.local" })
+const DB_URL = (process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL)!
 
 if (process.env.NODE_ENV === "production") throw new Error("seed:dev não roda em produção")
 
@@ -22,7 +23,7 @@ const people = [
   { email: "pj@acme.test", name: "João Silva", role: "collaborator" },
 ] as const
 
-const client = postgres(process.env.DATABASE_URL!, { max: 1 })
+const client = postgres(DB_URL, { max: 1 })
 const db = drizzle(client)
 
 try {

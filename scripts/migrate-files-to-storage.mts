@@ -13,7 +13,7 @@ import { config } from "dotenv"
 config({ path: ".env.local" })
 
 import { and, eq, isNotNull, isNull } from "drizzle-orm"
-import { db } from "../src/db"
+import { dbAdmin as db } from "../src/db/admin"
 import { collaboratorDocuments, collaborators, invoices } from "../src/db/schema"
 import { documentPath, ensureBucket, invoicePath, putFile } from "../src/lib/storage"
 

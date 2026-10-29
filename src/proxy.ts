@@ -1,14 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { IS_PRODUCTION, allowedHosts } from "@/lib/app-env"
 
 const SESSION_COOKIE = "navelo_session"
 const PROTECTED = ["/app", "/portal"]
 const isDev = process.env.NODE_ENV !== "production"
 
-// Hosts extras autorizados a chamar a aplicação (reverse proxy, túnel de desenvolvimento).
-const EXTRA_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean)
+// Origens autorizadas além do próprio host: navelo.com.br e www.navelo.com.br em produção, o
+// APP_URL do ambiente e o que estiver em ALLOWED_ORIGINS (ver src/lib/app-env.ts).
+const TRUSTED_HOSTS = allowedHosts()
 
 function contentSecurityPolicy(nonce: string) {
   return [
@@ -54,9 +53,12 @@ function isForeignOrigin(request: NextRequest) {
   const origin = request.headers.get("origin")
   if (!origin) return false // mesma origem (o navegador não manda Origin em GET próprio)
   try {
-    const host = new URL(origin).host
+    const url = new URL(origin)
+    // em produção só vale https: uma página em http no mesmo domínio poderia ser forjada na rede
+    if (IS_PRODUCTION && url.protocol !== "https:") return true
+    const host = url.host
     const self = request.headers.get("x-forwarded-host") ?? request.headers.get("host")
-    return host !== self && !EXTRA_ORIGINS.includes(host)
+    return host !== self && !TRUSTED_HOSTS.includes(host)
   } catch {
     return true // Origin malformado
   }

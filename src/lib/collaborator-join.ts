@@ -1,6 +1,6 @@
 import "server-only"
 import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { collaborators, memberships } from "@/db/schema"
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]

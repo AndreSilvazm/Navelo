@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { isIP } from "node:net"
 import { and, eq, gt } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { companies, memberships, sessions, users, type MembershipRole } from "@/db/schema"
 import { generateToken, hashToken } from "./tokens"
 

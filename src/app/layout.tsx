@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { SITE, SITE_URL } from "@/lib/site";
+import { EnvTag } from "@/components/env-tag";
+import { IS_PRODUCTION } from "@/lib/app-env";
+import { SITE, SITE_URL, TITLE_PREFIX } from "@/lib/site";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,9 +21,11 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: SITE.title,
-    template: "%s · Navelo",
+    default: `${TITLE_PREFIX}${SITE.title}`,
+    template: `${TITLE_PREFIX}%s · Navelo`,
   },
+  // ambiente de teste nunca entra em buscador
+  ...(IS_PRODUCTION ? {} : { robots: { index: false, follow: false } }),
   description: SITE.description,
   applicationName: SITE.name,
   keywords: SITE.keywords,
@@ -58,6 +62,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Pular para o conteúdo
         </a>
         <Providers>{children}</Providers>
+        <EnvTag />
       </body>
     </html>
   );

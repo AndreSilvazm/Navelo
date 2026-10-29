@@ -3,7 +3,7 @@
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm"
 import { isIP } from "node:net"
 import { headers } from "next/headers"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { passwordResets, sessions, users } from "@/db/schema"
 import { hashPassword, validatePassword } from "@/lib/auth/password"
 import { RESET_TTL_MINUTES } from "@/lib/auth/password-rules"

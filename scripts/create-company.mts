@@ -13,6 +13,8 @@ import { sendInvitationEmail } from "../src/lib/email"
 import { generateToken, hashToken, normalizeEmail } from "../src/lib/auth/tokens"
 
 config({ path: ".env.local" })
+// operação de sistema: usa o admin quando existe
+const DB_URL = (process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL)!
 
 const INVITE_TTL_DAYS = 7
 
@@ -33,7 +35,7 @@ if (!cnpj || cnpj.length !== 14 || !values.name || !values["owner-email"]) {
   process.exit(1)
 }
 
-const client = postgres(process.env.DATABASE_URL!, { max: 1 })
+const client = postgres(DB_URL, { max: 1 })
 const db = drizzle(client)
 
 try {

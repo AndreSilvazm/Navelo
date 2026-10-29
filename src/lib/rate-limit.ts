@@ -1,7 +1,7 @@
 import "server-only"
 import { headers } from "next/headers"
 import { sql } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 
 export type RateLimitResult = { ok: boolean; retryAfterSeconds: number }
 

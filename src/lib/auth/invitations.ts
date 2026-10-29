@@ -1,6 +1,7 @@
 import "server-only"
 import { eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/db"
+import { dbAdmin } from "@/db/admin"
 import { companies, invitations, users, type MembershipRole } from "@/db/schema"
 import { sendInvitationEmail } from "@/lib/email"
 import { generateToken, hashToken, legacyHashToken, normalizeEmail } from "./tokens"
@@ -18,7 +19,8 @@ export type InvitationLookup =
     }
 
 export async function lookupInvitation(token: string): Promise<InvitationLookup> {
-  const [row] = await db
+  // quem abre o link ainda não tem sessão: consulta de sistema
+  const [row] = await dbAdmin
     .select({ invitation: invitations, company: companies })
     .from(invitations)
     .innerJoin(companies, eq(companies.id, invitations.companyId))
@@ -32,7 +34,7 @@ export async function lookupInvitation(token: string): Promise<InvitationLookup>
   if (invitation.expiresAt <= new Date()) return { status: "expired" }
   if (company.status !== "active") return { status: "company_inactive" }
 
-  const [existing] = await db
+  const [existing] = await dbAdmin
     .select({ id: users.id, termsAcceptedAt: users.termsAcceptedAt })
     .from(users)
     .where(sql`lower(${users.email}) = ${normalizeEmail(invitation.email)}`)

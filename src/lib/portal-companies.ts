@@ -1,6 +1,6 @@
 import "server-only"
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { collaborators, companies, invitations, memberships, type CollaboratorStatus } from "@/db/schema"
 import { listAccesses, roleLabel } from "@/lib/auth/accesses"
 import type { AuthSession } from "@/lib/auth/session"

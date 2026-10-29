@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation"
 import { and, eq, inArray, sql } from "drizzle-orm"
-import { db } from "@/db"
+import { dbAdmin as db } from "@/db/admin"
 import { companies, invitations, memberships, users } from "@/db/schema"
 import { LEGAL_VERSION } from "@/lib/legal"
 import { joinAsCollaborator } from "@/lib/collaborator-join"

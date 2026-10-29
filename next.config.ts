@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
+import { allowedHosts } from "./src/lib/app-env";
 
-// Hosts autorizados a disparar server actions (o próprio domínio já é permitido por padrão).
-const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
+// Hosts autorizados a disparar server actions (o próprio domínio já é permitido por padrão):
+// em produção, navelo.com.br e www.navelo.com.br; em qualquer ambiente, o APP_URL e o ALLOWED_ORIGINS.
+const allowedOrigins = allowedHosts();
 
 const nextConfig: NextConfig = {
   // permite gerar um build de produção em outra pasta sem atrapalhar o `next dev`

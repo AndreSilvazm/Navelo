@@ -1,0 +1,57 @@
+/**
+ * Cria (ou atualiza) os usuários do banco de um ambiente.
+ *
+ *   DATABASE_MIGRATE_URL=<url do dono> NAVELO_APP_PASSWORD=... NAVELO_ADMIN_PASSWORD=... npm run db:roles
+ *
+ * - navelo_app:   usuário da aplicação. Sujeito ao RLS, sem DDL, sem acesso às tabelas de
+ *                 sistema (sessions, rate_limits, password_resets).
+ * - navelo_admin: fluxos de sistema que acontecem antes de existir sessão (login, convite, troca
+ *                 de senha, auditoria). Ignora o RLS, mas só faz DML: não altera estrutura.
+ *
+ * As permissões de cada tabela são dadas pela migração de políticas. Este script só cria os
+ * papéis e define as senhas, e pode ser repetido para trocar a senha.
+ */
+import postgres from "postgres"
+
+const ownerUrl = process.env.DATABASE_MIGRATE_URL ?? process.env.DATABASE_URL
+const appPassword = process.env.NAVELO_APP_PASSWORD
+const adminPassword = process.env.NAVELO_ADMIN_PASSWORD
+
+if (!ownerUrl) throw new Error("Defina DATABASE_MIGRATE_URL (a conexão do dono do banco).")
+if (!appPassword || appPassword.length < 24) throw new Error("NAVELO_APP_PASSWORD ausente ou curta demais (mínimo 24 caracteres).")
+if (!adminPassword || adminPassword.length < 24) throw new Error("NAVELO_ADMIN_PASSWORD ausente ou curta demais (mínimo 24 caracteres).")
+
+const sql = postgres(ownerUrl, { max: 1 })
+
+// senhas só com caracteres seguros: vão dentro de literais SQL e de URLs
+const seguro = (valor: string) => {
+  if (!/^[A-Za-z0-9_-]+$/.test(valor)) throw new Error("A senha deve usar apenas letras, números, _ e -.")
+  return valor
+}
+
+async function papel(nome: string, senha: string, opcoes: string) {
+  const [existe] = await sql`select 1 from pg_roles where rolname = ${nome}`
+  const clausula = `login nosuperuser nocreatedb nocreaterole noreplication ${opcoes} password '${seguro(senha)}'`
+  await sql.unsafe(existe ? `alter role ${nome} with ${clausula}` : `create role ${nome} with ${clausula}`)
+  return existe ? "atualizado" : "criado"
+}
+
+try {
+  // o app nunca ignora o RLS e tem teto de conexões
+  console.log("navelo_app:  ", await papel("navelo_app", appPassword, "nobypassrls connection limit 25"))
+  // o admin ignora o RLS (precisa, para funcionar antes da sessão) e também tem teto
+  const admin = await papel("navelo_admin", adminPassword, "bypassrls connection limit 10").catch(async (erro) => {
+    // em alguns provedores só superusuário concede BYPASSRLS
+    console.warn("BYPASSRLS recusado:", erro instanceof Error ? erro.message : erro)
+    throw erro
+  })
+  console.log("navelo_admin:", admin)
+
+  // permissão de conectar e de usar o schema; as tabelas vêm na migração de políticas
+  await sql.unsafe(`grant usage on schema public to navelo_app, navelo_admin`)
+  const [infos] = await sql`select rolname, rolbypassrls, rolsuper, rolcreaterole from pg_roles where rolname = 'navelo_app'`
+  const [infoAdmin] = await sql`select rolname, rolbypassrls, rolsuper, rolcreaterole from pg_roles where rolname = 'navelo_admin'`
+  console.log("conferência:", JSON.stringify([infos, infoAdmin]))
+} finally {
+  await sql.end()
+}
