@@ -5,6 +5,7 @@ import { db } from "@/db"
 import { bankChangeRequests, collaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
 import { Badge, Button, PageHeading } from "@/figma/ui"
 import { requireSession } from "@/lib/auth/session"
+import { ttlCached } from "@/lib/ttl-cache"
 import { formatBRL, formatDate } from "@/lib/format"
 import { competenceLabel, invoiceStatusLabel, invoiceStatusTone } from "@/lib/invoice-status"
 import { contractStatusOf } from "./contratos/status"
@@ -30,7 +31,8 @@ export default async function OverviewPage() {
   const seriesStart = new Date(now.getFullYear(), now.getMonth() - (MONTHS_BACK - 1), 1)
   const seriesFrom = `${key(seriesStart)}-01`
 
-  const [counts, contractRows, byStatus, paidThisMonth, series, pendingInvites, recent, bankRequests] = await Promise.all([
+  // consultas da visão geral: reaproveitadas por 30 s (a chave inclui a empresa)
+  const [counts, contractRows, byStatus, paidThisMonth, series, pendingInvites, recent, bankRequests] = await ttlCached(`overview:${companyId}`, 30_000, () => Promise.all([
     getTabCounts(companyId),
     db
       .select({
@@ -85,7 +87,7 @@ export default async function OverviewPage() {
       .from(bankChangeRequests)
       .where(and(eq(bankChangeRequests.companyId, companyId), eq(bankChangeRequests.status, "pending")))
       .groupBy(bankChangeRequests.collaboratorId),
-  ])
+  ]))
 
   const inv = (s: string) => byStatus.find((x) => x.status === s) ?? { n: 0, total: 0 }
   const activeContracts = contractRows.filter((c) => contractStatusOf(c).label === "Ativo")

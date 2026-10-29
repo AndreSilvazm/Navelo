@@ -1588,3 +1588,17 @@ a.table-person:hover strong { color: var(--zn-primary-strong); }
 
 /* Tag do ambiente (só fora de produção): fica colada no topo, no centro, acima de tudo */
 .env-tag { position: fixed; z-index: 2147483000; top: 0; left: 50%; transform: translateX(-50%); padding: 3px 14px 4px; border-radius: 0 0 10px 10px; background: #8b5cf6; color: #ffffff; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); white-space: nowrap; }
+
+/* Esqueleto de carregamento (troca de tela) */
+@keyframes skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.skel { background: var(--zn-primary-soft, #d6e4ff); border-radius: 8px; animation: skel-pulse 1.3s ease-in-out infinite; opacity: .6; }
+.skel-page { display: grid; gap: 16px; }
+.skel-title { height: 30px; width: min(320px, 60%); }
+.skel-subtitle { height: 16px; width: min(220px, 45%); margin-bottom: 12px; }
+.skel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.skel-card { padding: 18px; display: grid; gap: 12px; }
+.skel-table { padding: 18px; display: grid; gap: 14px; }
+.skel-line { height: 14px; width: 100%; }
+.skel-line.short { width: 40%; }
+.skel-line.big { height: 28px; width: 60%; }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }

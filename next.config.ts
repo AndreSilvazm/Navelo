@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   // não anunciar a tecnologia do servidor
   poweredByHeader: false,
   experimental: {
+    // guarda no navegador as telas já visitadas: voltar para uma tela recente não refaz a busca no servidor
+    staleTimes: { dynamic: 30, static: 180 },
     serverActions: {
       // envio dos documentos do colaborador: até 25 MB no total + overhead do multipart
       bodySizeLimit: "30mb",
