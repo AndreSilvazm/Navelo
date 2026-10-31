@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { desc, eq } from "drizzle-orm"
 import { db } from "@/db"
-import { contractCollaborators, contracts, invoices } from "@/db/schema"
+import { contracts, invoices } from "@/db/schema"
 import { Badge, Button, PageHeading } from "@/figma/ui"
 import { contractStatusOf } from "@/app/app/contratos/status"
 import { acceptPendingInvitation } from "@/app/portal/actions"
@@ -30,7 +30,8 @@ export default async function PortalHomePage() {
   const [{ invites }, contractList, links, rows] = await Promise.all([
     getPortalCompanies(session),
     getCollaboratorContracts(collaborator.id),
-    db.select({ contractId: contractCollaborators.contractId, linkedAt: contractCollaborators.createdAt }).from(contractCollaborators).where(eq(contractCollaborators.collaboratorId, collaborator.id)),
+    // o contrato é do colaborador desde que foi criado
+    db.select({ contractId: contracts.id, linkedAt: contracts.createdAt }).from(contracts).where(eq(contracts.collaboratorId, collaborator.id)),
     db
       .select({
         id: invoices.id,

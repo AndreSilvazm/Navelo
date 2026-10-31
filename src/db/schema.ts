@@ -267,6 +267,90 @@ export const invoices = pgTable(
   ],
 ).enableRLS()
 
+// Arquivos anexados ao contrato pelo corporativo (contrato assinado, aditivos, anexos...)
+export const contractFiles = pgTable(
+  "contract_files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    contractId: uuid("contract_id")
+      .notNull()
+      .references(() => contracts.id, { onDelete: "cascade" }),
+    // nome dado pelo corporativo (ex.: "Contrato assinado"); o nome do arquivo fica em fileName
+    title: text("title").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storagePath: text("storage_path").notNull(),
+    uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("contract_files_contract_idx").on(t.contractId, t.createdAt)],
+).enableRLS()
+
+export const reimbursementStatus = pgEnum("reimbursement_status", ["submitted", "approved", "rejected", "paid"])
+
+// Pedido de reembolso de despesa (viagem, hospedagem, refeição...). Mesmo caminho da nota
+// fiscal: o colaborador pede com os comprovantes, o corporativo aprova (ou recusa) e depois
+// marca como pago.
+export const reimbursements = pgTable(
+  "reimbursements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    collaboratorId: uuid("collaborator_id")
+      .notNull()
+      .references(() => collaborators.id, { onDelete: "cascade" }),
+    contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "set null" }),
+    // transporte, hospedagem, alimentacao, combustivel, passagem, outros (lista em src/lib/reimbursements.ts)
+    category: text("category").notNull(),
+    // o que foi e por quê (ex.: "Hospedagem na visita ao cliente em Curitiba")
+    description: text("description").notNull(),
+    // estabelecimento ou fornecedor (opcional)
+    merchant: text("merchant"),
+    // viagem, projeto ou evento a que a despesa pertence (opcional)
+    trip: text("trip"),
+    expenseDate: date("expense_date", { mode: "string" }).notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    status: reimbursementStatus("status").notNull().default("submitted"),
+    reviewNote: text("review_note"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    paidByUserId: uuid("paid_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("reimbursements_company_idx").on(t.companyId, t.createdAt),
+    index("reimbursements_collaborator_idx").on(t.collaboratorId, t.expenseDate),
+    check("reimbursements_amount_positive", sql`${t.amountCents} > 0`),
+  ],
+).enableRLS()
+
+// Comprovantes do pedido (pelo menos um por pedido; a regra é da aplicação)
+export const reimbursementFiles = pgTable(
+  "reimbursement_files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    reimbursementId: uuid("reimbursement_id")
+      .notNull()
+      .references(() => reimbursements.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storagePath: text("storage_path").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("reimbursement_files_reimbursement_idx").on(t.reimbursementId)],
+).enableRLS()
+
 // Histórico das mudanças de status feitas pelo corporativo (quem, quando e por quê)
 export const collaboratorStatusEvents = pgTable(
   "collaborator_status_events",
@@ -351,10 +435,14 @@ export const contracts = pgTable(
     invoiceDueDay: smallint("invoice_due_day"),
     responsibleUserId: uuid("responsible_user_id").references(() => users.id, { onDelete: "set null" }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Cada contrato é de UM colaborador, e cada colaborador tem no máximo um contrato ativo (os
+    // encerrados e cancelados ficam no histórico). Nulo só em contrato antigo sem dono.
+    collaboratorId: uuid("collaborator_id").references(() => collaborators.id, { onDelete: "restrict" }),
     ...timestamps,
   },
   (t) => [
     index("contracts_company_idx").on(t.companyId),
+    uniqueIndex("contracts_collaborator_key").on(t.collaboratorId).where(sql`${t.status} = 'active' and ${t.collaboratorId} is not null`),
     uniqueIndex("contracts_company_name_key").on(t.companyId, sql`lower(${t.name})`),
     check("contracts_invoice_due_day_range", sql`${t.invoiceDueDay} between 1 and 31`),
   ],

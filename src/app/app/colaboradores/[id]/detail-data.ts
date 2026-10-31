@@ -1,7 +1,7 @@
 import "server-only"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { bankChangeRequests, collaboratorStatusEvents, collaborators, contractCollaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
+import { bankChangeRequests, collaboratorStatusEvents, collaborators, contracts, invitations, invoices, memberships, reimbursements, users } from "@/db/schema"
 import { getDocumentChecklist } from "@/lib/collaborators"
 import type { CollaboratorDetailData } from "./types"
 
@@ -9,7 +9,7 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null)
 
 // Dados + documentos do colaborador em uma ida ao banco (as duas consultas rodam juntas)
 export async function getCollaboratorDetail(companyId: string, id: string, viewerUserId: string): Promise<CollaboratorDetailData | null> {
-  const [rows, checklist, linkedContracts, events, invoiceRows, bankPending] = await Promise.all([
+  const [rows, checklist, linkedContracts, events, invoiceRows, bankPending, reimbursementRows] = await Promise.all([
     db
       .select({
         c: collaborators,
@@ -34,12 +34,12 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
         status: contracts.status,
         startDate: contracts.startDate,
         endDate: contracts.endDate,
-        linkedAt: contractCollaborators.createdAt,
+        // o contrato é do colaborador desde que foi criado
+        linkedAt: contracts.createdAt,
       })
-      .from(contractCollaborators)
-      .innerJoin(contracts, eq(contracts.id, contractCollaborators.contractId))
-      .where(and(eq(contractCollaborators.collaboratorId, id), eq(contracts.companyId, companyId)))
-      .orderBy(contractCollaborators.createdAt),
+      .from(contracts)
+      .where(and(eq(contracts.collaboratorId, id), eq(contracts.companyId, companyId)))
+      .orderBy(contracts.createdAt),
     // histórico de mudanças de status (a empresa vem do próprio colaborador)
     db
       .select({
@@ -93,6 +93,21 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
       .from(bankChangeRequests)
       .where(and(eq(bankChangeRequests.collaboratorId, id), eq(bankChangeRequests.status, "pending")))
       .limit(1),
+    // reembolsos do colaborador: alimentam os custos do dashboard
+    db
+      .select({
+        id: reimbursements.id,
+        category: reimbursements.category,
+        description: reimbursements.description,
+        amountCents: reimbursements.amountCents,
+        expenseDate: reimbursements.expenseDate,
+        status: reimbursements.status,
+        createdAt: reimbursements.createdAt,
+        paidAt: reimbursements.paidAt,
+      })
+      .from(reimbursements)
+      .where(and(eq(reimbursements.collaboratorId, id), eq(reimbursements.companyId, companyId)))
+      .orderBy(desc(reimbursements.expenseDate), desc(reimbursements.createdAt)),
   ])
 
   const row = rows[0]
@@ -163,6 +178,7 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
       reviewedAt: iso(i.reviewedAt),
       paidAt: iso(i.paidAt),
     })),
+    reimbursements: reimbursementRows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), paidAt: iso(r.paidAt) })),
     monthlyAmountCents: c.monthlyAmountCents,
     monthlyAmountUpdatedAt: iso(c.monthlyAmountUpdatedAt),
     monthlyAmountUpdatedBy: row.amountBy,

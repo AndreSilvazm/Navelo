@@ -1,19 +1,21 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { and, asc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { db } from "@/db"
-import { collaborators, contractCollaborators, contractRequirements, contracts, memberships, users } from "@/db/schema"
+import { collaborators, contractFiles, contractRequirements, contracts, invoices, memberships, users } from "@/db/schema"
 import { Badge, Button, Card, Icon } from "@/figma/ui"
 import { ROLE_LABELS } from "@/lib/auth/permissions"
 import { CORPORATE_ROLES, requireSession } from "@/lib/auth/session"
+
 import { formatBRL, formatDate, formatInvoiceDue } from "@/lib/format"
 import { statusLabel, statusTone } from "../../colaboradores/types"
-import { removeContractCollaborator, removeContractRequirement } from "../actions"
+import { deleteContractFile, removeContractRequirement } from "../actions"
 import { collaboratorOption } from "../options"
 import { contractStatusOf } from "../status"
-import { AddCollaborators } from "./add-collaborators"
 import { EditContractForm } from "./edit-form"
+import { EndContractButton } from "./end-contract-button"
+import { ContractFileForm } from "./file-form"
 import { RequirementForm } from "./requirement-form"
 
 export const metadata: Metadata = { title: "Contrato" }
@@ -21,8 +23,8 @@ export const metadata: Metadata = { title: "Contrato" }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TABS = [
   { id: "geral", label: "Visão geral" },
-  { id: "colaboradores", label: "Colaboradores" },
-  { id: "documentos", label: "Documentos" },
+  { id: "arquivos", label: "Arquivos" },
+  { id: "documentos", label: "Exigências" },
   { id: "notas", label: "Notas fiscais" },
   { id: "dados", label: "Dados do contrato" },
 ] as const
@@ -31,6 +33,8 @@ type TabId = (typeof TABS)[number]["id"]
 const DAY = 86_400_000
 const days = (from: string, to: number) => Math.floor((to - new Date(from).getTime()) / DAY)
 const rowStyle = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" } as const
+const size = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`)
+const when = (d: Date) => d.toLocaleDateString("pt-BR")
 
 function Fact({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
@@ -60,46 +64,39 @@ export default async function ContractPage({
   if (!UUID.test(id)) notFound()
   const tab: TabId = TABS.find((t) => t.id === aba)?.id ?? "geral"
 
-  // contrato, vínculos, documentos e o que cada aba precisa, tudo em paralelo (uma ida ao banco)
-  const [[contract], people, docs, available, members] = await Promise.all([
-    db
-      .select({ c: contracts, responsible: users.name })
-      .from(contracts)
-      .leftJoin(users, eq(users.id, contracts.responsibleUserId))
-      .where(and(eq(contracts.id, id), eq(contracts.companyId, session.company.id))),
+  // contrato, colaborador, exigências e arquivos, tudo em paralelo (uma ida ao banco)
+  const [[contract], docs, files, members, invoiceRows] = await Promise.all([
     db
       .select({
-        id: collaborators.id,
-        status: collaborators.status,
-        name: users.name,
-        legalName: collaborators.legalName,
-        cnpj: collaborators.cnpj,
-        jobTitle: collaborators.jobTitle,
+        c: contracts,
+        responsible: users.name,
+        person: {
+          id: collaborators.id,
+          status: collaborators.status,
+          legalName: collaborators.legalName,
+          cnpj: collaborators.cnpj,
+          jobTitle: collaborators.jobTitle,
+        },
       })
-      .from(contractCollaborators)
-      .innerJoin(collaborators, eq(collaborators.id, contractCollaborators.collaboratorId))
-      .innerJoin(memberships, eq(memberships.id, collaborators.membershipId))
-      .innerJoin(users, eq(users.id, memberships.userId))
-      .where(eq(contractCollaborators.contractId, id))
-      .orderBy(asc(users.name)),
+      .from(contracts)
+      .leftJoin(users, eq(users.id, contracts.responsibleUserId))
+      .leftJoin(collaborators, eq(collaborators.id, contracts.collaboratorId))
+      .where(and(eq(contracts.id, id), eq(contracts.companyId, session.company.id))),
     db.select().from(contractRequirements).where(eq(contractRequirements.contractId, id)).orderBy(asc(contractRequirements.createdAt)),
-    // colaboradores ativos da empresa que ainda não estão neste contrato
-    tab === "colaboradores"
-      ? db
-          .select({ id: collaborators.id, name: users.name, legalName: collaborators.legalName, cnpj: collaborators.cnpj, jobTitle: collaborators.jobTitle })
-          .from(collaborators)
-          .innerJoin(memberships, eq(memberships.id, collaborators.membershipId))
-          .innerJoin(users, eq(users.id, memberships.userId))
-          .where(
-            and(
-              eq(collaborators.companyId, session.company.id),
-              eq(collaborators.status, "active"),
-              eq(memberships.status, "active"),
-              sql`${collaborators.id} not in (select collaborator_id from contract_collaborators where contract_id = ${id})`,
-            ),
-          )
-          .orderBy(asc(users.name))
-      : Promise.resolve([]),
+    db
+      .select({
+        id: contractFiles.id,
+        title: contractFiles.title,
+        fileName: contractFiles.fileName,
+        mimeType: contractFiles.mimeType,
+        sizeBytes: contractFiles.sizeBytes,
+        createdAt: contractFiles.createdAt,
+        by: users.name,
+      })
+      .from(contractFiles)
+      .leftJoin(users, eq(users.id, contractFiles.uploadedByUserId))
+      .where(eq(contractFiles.contractId, id))
+      .orderBy(desc(contractFiles.createdAt)),
     // equipe corporativa (para escolher o responsável ao editar)
     tab === "dados"
       ? db
@@ -109,15 +106,30 @@ export default async function ContractPage({
           .where(and(eq(memberships.companyId, session.company.id), eq(memberships.status, "active"), inArray(memberships.role, [...CORPORATE_ROLES])))
           .orderBy(asc(users.name))
       : Promise.resolve([]),
+    tab === "notas"
+      ? db
+          .select({ id: invoices.id, number: invoices.number, amountCents: invoices.amountCents, competence: invoices.competence, status: invoices.status })
+          .from(invoices)
+          .where(and(eq(invoices.contractId, id), eq(invoices.companyId, session.company.id)))
+          .orderBy(desc(invoices.competence))
+      : Promise.resolve([]),
   ])
   if (!contract) notFound()
 
-  const { c } = contract
+  const { c, person } = contract
+  const [owner] = person?.id
+    ? await db
+        .select({ name: users.name })
+        .from(collaborators)
+        .innerJoin(memberships, eq(memberships.id, collaborators.membershipId))
+        .innerJoin(users, eq(users.id, memberships.userId))
+        .where(eq(collaborators.id, person.id))
+    : []
   const status = contractStatusOf(c)
   const canEdit = c.status !== "canceled"
   const now = new Date().getTime()
   const href = (t: TabId) => (t === "geral" ? `/app/contratos/${id}` : `/app/contratos/${id}?aba=${t}`)
-  const counts: Partial<Record<TabId, number>> = { colaboradores: people.length, documentos: docs.length }
+  const counts: Partial<Record<TabId, number>> = { arquivos: files.length, documentos: docs.length }
   const requiredDocs = docs.filter((d) => d.required).length
 
   // vigência em linguagem simples
@@ -140,11 +152,14 @@ export default async function ContractPage({
           <Icon name="contract" size={23} />
         </span>
         <div>
-          <span>{session.company.tradeName ?? session.company.legalName}</span>
+          <span>{owner?.name ?? "Sem colaborador"}</span>
           <strong>{c.name}</strong>
           <small>{c.description ?? "—"}</small>
         </div>
-        <Badge tone={status.tone}>{status.label}</Badge>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <Badge tone={status.tone}>{status.label}</Badge>
+          {c.status === "active" && <EndContractButton contractId={id} />}
+        </div>
       </Card>
 
       <nav aria-label="Seções do contrato" className="page-tabs" style={{ marginTop: 24 }}>
@@ -159,11 +174,11 @@ export default async function ContractPage({
       {tab === "geral" && (
         <>
           <div className="mvp-contract-facts" style={{ marginTop: 0 }}>
+            <Fact label="Colaborador" muted={!owner} value={owner?.name ?? "Sem colaborador"} />
             <Fact label="Período" value={`${formatDate(c.startDate)} — ${c.endDate ? formatDate(c.endDate) : "Sem prazo final"}`} />
             <Fact label="Valor" muted={c.amountCents === null} value={c.amountCents !== null ? formatBRL(c.amountCents) : "A definir"} />
             <Fact label="Envio das notas fiscais" value={formatInvoiceDue(c.invoiceDueDay)} />
             <Fact label="Responsável" value={contract.responsible ?? "Sem responsável"} />
-            <Fact label="Colaboradores" value={String(people.length)} />
           </div>
 
           <div className="mvp-settings-grid" style={{ marginTop: 24 }}>
@@ -187,34 +202,41 @@ export default async function ContractPage({
             <Card className="mvp-settings-card">
               <div className="mvp-section-heading">
                 <div>
-                  <strong>Colaboradores</strong>
-                  <span>{people.length} vinculado(s)</span>
+                  <strong>Colaborador</strong>
+                  <span>Dono deste contrato</span>
                 </div>
-                <Link className="doc-review-next" href={href("colaboradores")}>
-                  Ver todos →
-                </Link>
               </div>
-              {people.length === 0 ? (
-                <p className="form-hint">Ninguém vinculado ainda.</p>
-              ) : (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {people.slice(0, 4).map((p) => (
-                    <Link href={`/app/colaboradores/${p.id}`} key={p.id}>
-                      <strong>{p.name}</strong> <span className="form-hint">{p.jobTitle}</span>
-                    </Link>
-                  ))}
-                  {people.length > 4 && <span className="form-hint">e mais {people.length - 4}</span>}
+              {person?.id && owner ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <Link href={`/app/colaboradores/${person.id}`}>
+                    <strong>{owner.name}</strong>
+                  </Link>
+                  <span className="form-hint">{collaboratorOption({ id: person.id, name: owner.name, legalName: person.legalName, cnpj: person.cnpj, jobTitle: person.jobTitle }).hint}</span>
+                  {person.status && <Badge tone={statusTone[person.status]}>{statusLabel[person.status]}</Badge>}
                 </div>
+              ) : (
+                <p className="form-hint">Este contrato antigo não tem colaborador. Crie um contrato novo para a pessoa certa.</p>
               )}
             </Card>
           </div>
 
-          <div style={{ marginTop: 24 }}>
+          <div className="mvp-settings-grid" style={{ marginTop: 24 }}>
             <Card className="mvp-settings-card">
               <div className="mvp-section-heading">
                 <div>
-                  <strong>Documentos deste contrato</strong>
-                  <span>{docs.length === 0 ? "Nenhum documento específico." : `${docs.length} exigido(s), ${requiredDocs} obrigatório(s).`}</span>
+                  <strong>Arquivos do contrato</strong>
+                  <span>{files.length === 0 ? "Nenhum arquivo anexado ainda." : `${files.length} arquivo(s) anexado(s).`}</span>
+                </div>
+                <Link className="doc-review-next" href={href("arquivos")}>
+                  Gerenciar →
+                </Link>
+              </div>
+            </Card>
+            <Card className="mvp-settings-card">
+              <div className="mvp-section-heading">
+                <div>
+                  <strong>Exigências deste contrato</strong>
+                  <span>{docs.length === 0 ? "Nenhuma exigência específica." : `${docs.length} exigido(s), ${requiredDocs} obrigatório(s).`}</span>
                 </div>
                 <Link className="doc-review-next" href={href("documentos")}>
                   Gerenciar →
@@ -225,29 +247,35 @@ export default async function ContractPage({
         </>
       )}
 
-      {tab === "colaboradores" && (
-        <>
+      {tab === "arquivos" && (
+        <div className="mvp-settings-grid">
           <Card className="mvp-settings-card">
             <div className="mvp-section-heading">
               <div>
-                <strong>Colaboradores do contrato</strong>
-                <span>{people.length} vinculado(s) a este contrato</span>
+                <strong>Arquivos anexados</strong>
+                <span>Documentos deste contrato. Só o corporativo vê e anexa.</span>
               </div>
             </div>
-            {people.length === 0 ? (
-              <p className="form-hint">Nenhum colaborador vinculado ainda.</p>
+            {files.length === 0 ? (
+              <p className="form-hint">Nenhum arquivo anexado ainda.</p>
             ) : (
               <div style={{ display: "grid", gap: 12 }}>
-                {people.map((p) => (
-                  <div key={p.id} style={rowStyle}>
-                    <Link href={`/app/colaboradores/${p.id}`} style={{ minWidth: 0 }}>
-                      <strong>{p.name}</strong>
-                      <div className="form-hint">{collaboratorOption(p).hint}</div>
-                    </Link>
+                {files.map((f) => (
+                  <div key={f.id} style={rowStyle}>
+                    <div style={{ minWidth: 0 }}>
+                      <a href={`/api/contratos/${id}/arquivos/${f.id}`} rel="noreferrer" target="_blank">
+                        <strong>{f.title}</strong>
+                      </a>
+                      <div className="form-hint">
+                        {f.fileName} · {size(f.sizeBytes)} · anexado em {when(f.createdAt)} por {f.by ?? "usuário removido"}
+                      </div>
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Badge tone={statusTone[p.status]}>{statusLabel[p.status]}</Badge>
+                      <a className="doc-review-next" href={`/api/contratos/${id}/arquivos/${f.id}?download=1`}>
+                        Baixar
+                      </a>
                       {canEdit && (
-                        <form action={removeContractCollaborator.bind(null, id, p.id)}>
+                        <form action={deleteContractFile.bind(null, id, f.id)}>
                           <Button type="submit" variant="ghost">
                             Remover
                           </Button>
@@ -259,21 +287,18 @@ export default async function ContractPage({
               </div>
             )}
           </Card>
-
           {canEdit && (
-            <div style={{ marginTop: 24 }}>
-              <Card className="mvp-settings-card">
-                <div className="mvp-section-heading">
-                  <div>
-                    <strong>Adicionar colaboradores</strong>
-                    <span>Vincule mais pessoas a este contrato. Só aparecem colaboradores ativos que ainda não estão nele.</span>
-                  </div>
+            <Card className="mvp-settings-card">
+              <div className="mvp-section-heading">
+                <div>
+                  <strong>Anexar documento</strong>
+                  <span>Contrato assinado, aditivos e outros documentos deste contrato.</span>
                 </div>
-                <AddCollaborators contractId={id} options={available.map(collaboratorOption)} />
-              </Card>
-            </div>
+              </div>
+              <ContractFileForm contractId={id} />
+            </Card>
           )}
-        </>
+        </div>
       )}
 
       {tab === "documentos" && (
@@ -281,12 +306,12 @@ export default async function ContractPage({
           <Card className="mvp-settings-card">
             <div className="mvp-section-heading">
               <div>
-                <strong>Documentos deste contrato</strong>
+                <strong>Documentos que o colaborador precisa entregar</strong>
                 <span>Exigidos além dos documentos de cadastro da empresa.</span>
               </div>
             </div>
             {docs.length === 0 ? (
-              <p className="form-hint">Nenhum documento específico.</p>
+              <p className="form-hint">Nenhuma exigência específica.</p>
             ) : (
               <div style={{ display: "grid", gap: 12 }}>
                 {docs.map((d) => (
@@ -311,8 +336,8 @@ export default async function ContractPage({
             <Card className="mvp-settings-card">
               <div className="mvp-section-heading">
                 <div>
-                  <strong>Adicionar documento</strong>
-                  <span>Exigência só deste contrato.</span>
+                  <strong>Adicionar exigência</strong>
+                  <span>Documento pedido só neste contrato.</span>
                 </div>
               </div>
               <RequirementForm contractId={id} />
@@ -326,51 +351,68 @@ export default async function ContractPage({
           <div className="mvp-section-heading">
             <div>
               <strong>Notas fiscais</strong>
-              <span>Prazo de envio para todos os colaboradores deste contrato.</span>
+              <span>Prazo de envio: {formatInvoiceDue(c.invoiceDueDay)}.</span>
             </div>
           </div>
-          <dl className="info-grid">
-            <div className="info-field">
-              <dt>Prazo de envio</dt>
-              <dd>{formatInvoiceDue(c.invoiceDueDay)}</dd>
+          {invoiceRows.length === 0 ? (
+            <p className="form-hint">O colaborador ainda não enviou notas para este contrato.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {invoiceRows.map((n) => (
+                <div key={n.id} style={rowStyle}>
+                  <Link href={`/app/notas-fiscais/${n.id}`}>
+                    <strong>nº {n.number}</strong> <span className="form-hint">competência {n.competence.slice(0, 7)}</span>
+                  </Link>
+                  <span>
+                    {formatBRL(n.amountCents)} · <span className="form-hint">{n.status === "paid" ? "paga" : n.status === "approved" ? "aprovada" : n.status === "rejected" ? "recusada" : "em revisão"}</span>
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="info-field">
-              <dt>Colaboradores que enviam</dt>
-              <dd>{people.length}</dd>
-            </div>
-          </dl>
-          <p className="form-hint" style={{ marginTop: 16 }}>
-            As notas enviadas pelos colaboradores deste contrato aparecerão aqui, com quem já enviou e quem está atrasado.
-          </p>
+          )}
         </Card>
       )}
 
       {tab === "dados" && (
-        <Card className="mvp-settings-card">
-          <div className="mvp-section-heading">
-            <div>
-              <strong>Dados do contrato</strong>
-              <span>Edite as informações do contrato. Valor e término podem ficar em branco.</span>
+        <div style={{ display: "grid", gap: 24 }}>
+          <Card className="mvp-settings-card">
+            <div className="mvp-section-heading">
+              <div>
+                <strong>Dados do contrato</strong>
+                <span>Edite as informações do contrato. Valor e término podem ficar em branco.</span>
+              </div>
             </div>
-          </div>
-          {canEdit ? (
-            <EditContractForm
-              contractId={id}
-              members={members.map((m) => ({ id: m.id, label: `${m.name} · ${ROLE_LABELS[m.role]}` }))}
-              values={{
-                name: c.name,
-                description: c.description ?? "",
-                responsibleUserId: c.responsibleUserId ?? "",
-                startDate: c.startDate,
-                endDate: c.endDate ?? "",
-                amount: c.amountCents !== null ? (c.amountCents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",
-                invoiceDueDay: c.invoiceDueDay ? String(c.invoiceDueDay) : "",
-              }}
-            />
-          ) : (
-            <p className="form-hint">Este contrato foi cancelado e não pode ser editado.</p>
+            {canEdit ? (
+              <EditContractForm
+                contractId={id}
+                members={members.map((m) => ({ id: m.id, label: `${m.name} · ${ROLE_LABELS[m.role]}` }))}
+                values={{
+                  name: c.name,
+                  description: c.description ?? "",
+                  responsibleUserId: c.responsibleUserId ?? "",
+                  startDate: c.startDate,
+                  endDate: c.endDate ?? "",
+                  amount: c.amountCents !== null ? (c.amountCents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",
+                  invoiceDueDay: c.invoiceDueDay ? String(c.invoiceDueDay) : "",
+                }}
+              />
+            ) : (
+              <p className="form-hint">Este contrato foi cancelado e não pode ser editado.</p>
+            )}
+          </Card>
+
+          {c.status === "active" && (
+            <Card className="mvp-settings-card">
+              <div className="mvp-section-heading">
+                <div>
+                  <strong>Encerrar contrato</strong>
+                  <span>O contrato sai de vigência e fica no histórico, e o colaborador fica livre para ter um contrato novo. Não dá para desfazer.</span>
+                </div>
+              </div>
+              <EndContractButton contractId={id} />
+            </Card>
           )}
-        </Card>
+        </div>
       )}
     </>
   )

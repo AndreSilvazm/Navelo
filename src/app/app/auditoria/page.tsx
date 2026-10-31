@@ -1,38 +1,21 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { and, desc, eq, like, or } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, isNotNull, like, lt, or, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { auditEvents } from "@/db/schema"
-import { Badge, Card, PageHeading } from "@/figma/ui"
+import { Card, PageHeading } from "@/figma/ui"
 import { requireSession } from "@/lib/auth/session"
+import { fold, searchTerms } from "@/lib/search"
+import { containsTerm } from "@/lib/search-sql"
+import { AuditFilters } from "./audit-filters"
+import { LABEL } from "./audit-labels"
+import { AuditTable } from "./audit-table"
 
 export const metadata: Metadata = { title: "Auditoria", robots: { index: false, follow: false } }
 
 const PAGE_SIZE = 60
-
-// Como cada ação aparece na lista, e o tom do selo
-const LABEL: Record<string, { text: string; tone: "success" | "danger" | "warning" | "info" | "neutral" }> = {
-  "document.viewed": { text: "Visualizou documento", tone: "neutral" },
-  "document.downloaded": { text: "Baixou documento", tone: "warning" },
-  "invoice.viewed": { text: "Visualizou nota", tone: "neutral" },
-  "invoice.downloaded": { text: "Baixou nota", tone: "warning" },
-  "bank_change.requested": { text: "Pediu troca de conta", tone: "warning" },
-  "bank_change.approved": { text: "Aprovou troca de conta", tone: "danger" },
-  "bank_change.rejected": { text: "Recusou troca de conta", tone: "neutral" },
-  "bank_change.canceled": { text: "Cancelou o pedido de troca", tone: "neutral" },
-  "collaborator.approved": { text: "Liberou o acesso", tone: "success" },
-  "collaborator.rejected": { text: "Recusou o acesso", tone: "danger" },
-  "collaborator.suspended": { text: "Suspendeu o acesso", tone: "danger" },
-  "collaborator.reactivated": { text: "Reativou o acesso", tone: "success" },
-  "collaborator.reopened": { text: "Reabriu o cadastro", tone: "info" },
-  "document.approved": { text: "Aprovou documento", tone: "success" },
-  "document.rejected": { text: "Recusou documento", tone: "danger" },
-  "invoice.approved": { text: "Aprovou nota", tone: "success" },
-  "invoice.rejected": { text: "Recusou nota", tone: "danger" },
-  "invoice.paid": { text: "Marcou nota como paga", tone: "success" },
-  "collaborator.amount_changed": { text: "Mudou o valor mensal", tone: "warning" },
-  "password.changed": { text: "Trocou a senha", tone: "info" },
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DAY_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/
 
 const FILTERS = [
   { id: "tudo", label: "Tudo", match: null },
@@ -43,55 +26,72 @@ const FILTERS = [
 
 const quando = (d: Date) => d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" })
 
-// Mostra o conteúdo de "details" de um jeito legível, inclusive o de/para da conta bancária
-function Detalhes({ details }: { details: unknown }) {
-  if (!details || typeof details !== "object") return null
-  const obj = details as Record<string, unknown>
-  const texto = (valor: unknown): string => {
-    if (valor === null || valor === undefined) return "—"
-    if (typeof valor === "object") {
-      return Object.entries(valor as Record<string, unknown>)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => `${k}: ${String(v)}`)
-        .join(", ")
-    }
-    return String(valor)
-  }
-  const linhas = Object.entries(obj).filter(([k]) => k !== "colaboradorId")
-  if (linhas.length === 0) return null
-  return (
-    <ul className="audit-details">
-      {linhas.map(([chave, valor]) => (
-        <li key={chave}>
-          <b>{chave === "de" ? "De" : chave === "para" ? "Para" : chave}:</b> {texto(valor)}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-export default async function AuditPage({ searchParams }: { searchParams: Promise<{ filtro?: string; pagina?: string }> }) {
+export default async function AuditPage({ searchParams }: { searchParams: Promise<{ filtro?: string; pagina?: string; acao?: string; quem?: string; de?: string; ate?: string; q?: string }> }) {
   const session = await requireSession("corporate")
-  const { filtro, pagina } = await searchParams
+  const { filtro, pagina, acao, quem, de, ate, q } = await searchParams
+  const companyId = session.company.id
 
   const atual = FILTERS.find((f) => f.id === filtro) ?? FILTERS[0]
   const page = Math.max(1, Number(pagina) || 1)
 
-  const rows = await db
-    .select()
-    .from(auditEvents)
-    .where(
-      atual.match
-        ? and(eq(auditEvents.companyId, session.company.id), or(...atual.match.map((m) => like(auditEvents.action, m))))
-        : eq(auditEvents.companyId, session.company.id),
+  // filtros da URL: só valem valores conhecidos (ação da lista, UUID, data AAAA-MM-DD)
+  const acaoOk = acao && acao in LABEL ? acao : undefined
+  const quemOk = quem && UUID_RE.test(quem) ? quem : undefined
+  const deOk = de && DAY_RE.test(de) ? de : undefined
+  const ateOk = ate && DAY_RE.test(ate) ? ate : undefined
+
+  // busca livre: cada palavra precisa aparecer em algum campo (pessoa, papel, alvo, detalhes, IP) ou no nome da ação
+  const busca = (q ?? "").trim().slice(0, 100)
+  const termConditions = searchTerms(busca).map((term) => {
+    const actionIds = Object.entries(LABEL).filter(([, v]) => fold(v.text).includes(term)).map(([id]) => id)
+    return or(
+      containsTerm(auditEvents.actorName, term),
+      containsTerm(auditEvents.actorRole, term),
+      containsTerm(auditEvents.targetLabel, term),
+      containsTerm(sql`${auditEvents.details}::text`, term),
+      containsTerm(sql`${auditEvents.ipAddress}::text`, term),
+      actionIds.length ? inArray(auditEvents.action, actionIds) : undefined,
     )
-    .orderBy(desc(auditEvents.createdAt))
-    .limit(PAGE_SIZE + 1)
-    .offset((page - 1) * PAGE_SIZE)
+  })
+
+  const conditions = [
+    ...termConditions,
+    eq(auditEvents.companyId, companyId),
+    atual.match ? or(...atual.match.map((m) => like(auditEvents.action, m))) : undefined,
+    acaoOk ? eq(auditEvents.action, acaoOk) : undefined,
+    quemOk ? eq(auditEvents.actorUserId, quemOk) : undefined,
+    deOk ? gte(auditEvents.createdAt, new Date(`${deOk}T00:00:00-03:00`)) : undefined,
+    // o dia final entra inteiro: vale até a meia-noite seguinte
+    ateOk ? lt(auditEvents.createdAt, new Date(new Date(`${ateOk}T00:00:00-03:00`).getTime() + 86_400_000)) : undefined,
+  ]
+
+  const [rows, people] = await Promise.all([
+    db
+      .select()
+      .from(auditEvents)
+      .where(and(...conditions))
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(PAGE_SIZE + 1)
+      .offset((page - 1) * PAGE_SIZE),
+    // quem aparece no registro desta empresa (para o filtro de pessoa)
+    db
+      .selectDistinct({ id: auditEvents.actorUserId, name: auditEvents.actorName })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.companyId, companyId), isNotNull(auditEvents.actorUserId)))
+      .limit(200),
+  ])
 
   const temMais = rows.length > PAGE_SIZE
   const lista = rows.slice(0, PAGE_SIZE)
-  const href = (p: number) => `/app/auditoria?filtro=${atual.id}${p > 1 ? `&pagina=${p}` : ""}`
+  const actors = [...new Map(people.map((p) => [p.id!, p.name ?? "Sem nome"])).entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))
+  const actions = Object.entries(LABEL)
+    .map(([value, { text }]) => ({ value, label: text }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))
+  const extra = new URLSearchParams()
+  for (const [k, v] of Object.entries({ acao: acaoOk, quem: quemOk, de: deOk, ate: ateOk, q: busca })) if (v) extra.set(k, v)
+  const href = (p: number) => `/app/auditoria?filtro=${atual.id}${extra.size ? `&${extra}` : ""}${p > 1 ? `&pagina=${p}` : ""}`
 
   return (
     <>
@@ -108,48 +108,27 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         ))}
       </nav>
 
+      <AuditFilters actions={actions} actors={actors} values={{ filtro: atual.id, acao: acaoOk, quem: quemOk, de: deOk, ate: ateOk, q: busca || undefined }} />
+
       <Card className="workspace-table-card">
         {lista.length === 0 ? (
           <p className="form-hint" style={{ padding: 24 }}>
             Nenhum registro neste filtro ainda.
           </p>
         ) : (
-          <div className="workspace-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Quando</th>
-                  <th>Quem</th>
-                  <th>Ação</th>
-                  <th>Sobre</th>
-                  <th>Detalhes</th>
-                  <th>IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lista.map((e) => {
-                  const rotulo = LABEL[e.action] ?? { text: e.action, tone: "neutral" as const }
-                  return (
-                    <tr key={e.id}>
-                      <td style={{ whiteSpace: "nowrap" }}>{quando(e.createdAt)}</td>
-                      <td>
-                        <strong>{e.actorName ?? "—"}</strong>
-                        {e.actorRole && <div className="cell-sub">{e.actorRole}</div>}
-                      </td>
-                      <td>
-                        <Badge tone={rotulo.tone}>{rotulo.text}</Badge>
-                      </td>
-                      <td>{e.targetLabel ?? "—"}</td>
-                      <td>
-                        <Detalhes details={e.details} />
-                      </td>
-                      <td style={{ whiteSpace: "nowrap" }}>{e.ipAddress ?? "—"}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <AuditTable
+            rows={lista.map((e) => ({
+              id: e.id,
+              when: quando(e.createdAt),
+              createdAt: e.createdAt.toISOString(),
+              actorName: e.actorName,
+              actorRole: e.actorRole,
+              action: e.action,
+              targetLabel: e.targetLabel,
+              details: e.details,
+              ipAddress: e.ipAddress,
+            }))}
+          />
         )}
       </Card>
 

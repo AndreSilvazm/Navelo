@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { logout } from "@/app/login/actions"
+import { AccountMenu } from "@/components/account-menu"
 import { initialsOf } from "@/lib/initials"
 import {
   Avatar,
@@ -25,6 +26,7 @@ const workspaceNav: Array<{
   { icon: "contract", label: "Contratos", to: "/app/contratos" },
   { icon: "people", label: "Colaboradores", short: "Equipe", to: "/app/colaboradores" },
   { icon: "upload", label: "Notas fiscais", short: "Notas", to: "/app/notas-fiscais" },
+  { icon: "payment", label: "Reembolsos", short: "Reemb.", to: "/app/reembolsos" },
   { icon: "shield", label: "Auditoria", to: "/app/auditoria" },
 ]
 
@@ -144,9 +146,18 @@ export function AppShell({
               <Icon name="bell" size={19} />
               <span className="notification-dot" />
             </IconButton>
-            <Link aria-label="Configurações da conta" className="topbar-account" href="/app/configuracoes">
+            <Link aria-label="Configurações da conta" className="topbar-account account-desktop" href="/app/configuracoes">
               <Avatar initials={initialsOf(user.name)} name={user.name} size="sm" tone={1} />
             </Link>
+            <AccountMenu
+              links={[
+                { href: "/app/configuracoes", label: "Configurações", icon: "gear" },
+                ...(hasOtherAccess ? [{ href: "/acesso", label: "Trocar de acesso", icon: "people" as const }] : []),
+              ]}
+              name={user.name}
+              subtitle={user.roleLabel}
+              tone={1}
+            />
           </div>
         </header>
         <main className="workspace-content" id="conteudo">

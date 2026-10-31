@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { collaborators, memberships, users } from "@/db/schema"
 import { Icon, PageHeading } from "@/figma/ui"
@@ -11,8 +11,8 @@ import { ContractForm } from "./contract-form"
 
 export const metadata: Metadata = { title: "Novo contrato" }
 
-export default async function NewContractPage() {
-  const session = await requireSession("corporate")
+export default async function NewContractPage({ searchParams }: { searchParams: Promise<{ colaborador?: string }> }) {
+  const [session, { colaborador }] = await Promise.all([requireSession("corporate"), searchParams])
 
   const [members, active] = await Promise.all([
     db
@@ -37,6 +37,8 @@ export default async function NewContractPage() {
           eq(collaborators.companyId, session.company.id),
           eq(collaborators.status, "active"),
           eq(memberships.status, "active"),
+          // quem já tem contrato ativo não aparece: é um contrato por colaborador
+          sql`not exists (select 1 from contracts k where k.collaborator_id = ${collaborators.id} and k.status = 'active')`,
         ),
       )
       .orderBy(asc(users.name)),
@@ -49,10 +51,11 @@ export default async function NewContractPage() {
         <Icon name="chevron" size={13} />
         <span>Novo contrato</span>
       </div>
-      <PageHeading subtitle="Defina o período, quem atua e o que precisa ser entregue." title="Novo contrato" />
+      <PageHeading subtitle="Escolha o colaborador, defina o período e o que precisa ser entregue." title="Novo contrato" />
       <ContractForm
         collaborators={active.map(collaboratorOption)}
         currentUserId={session.user.id}
+        preselected={active.some((c) => c.id === colaborador) ? colaborador : undefined}
         members={members.map((m) => ({ id: m.id, label: `${m.name} · ${ROLE_LABELS[m.role]}` }))}
       />
     </>

@@ -1,11 +1,12 @@
 import type { Metadata } from "next"
-import Link from "next/link"
-import { desc, eq, sql } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { db } from "@/db"
-import { contracts } from "@/db/schema"
-import { Badge, Button, Card, Icon, PageHeading } from "@/figma/ui"
+import { collaborators, contracts, memberships, users } from "@/db/schema"
+import { Button, Card, PageHeading } from "@/figma/ui"
 import { requireSession } from "@/lib/auth/session"
+import { formatCnpj } from "@/lib/cnpj"
 import { formatBRL, formatDate } from "@/lib/format"
+import { ContractsTable } from "./contracts-table"
 import { contractStatusOf } from "./status"
 
 export const metadata: Metadata = { title: "Contratos" }
@@ -17,14 +18,19 @@ export default async function ContractsPage() {
     .select({
       id: contracts.id,
       name: contracts.name,
-      description: contracts.description,
       status: contracts.status,
       startDate: contracts.startDate,
       endDate: contracts.endDate,
       amountCents: contracts.amountCents,
-      collaborators: sql<number>`(select count(*)::int from contract_collaborators cc where cc.contract_id = ${contracts.id})`,
+      collaboratorId: collaborators.id,
+      collaborator: users.name,
+      legalName: collaborators.legalName,
+      cnpj: collaborators.cnpj,
     })
     .from(contracts)
+    .leftJoin(collaborators, eq(collaborators.id, contracts.collaboratorId))
+    .leftJoin(memberships, eq(memberships.id, collaborators.membershipId))
+    .leftJoin(users, eq(users.id, memberships.userId))
     .where(eq(contracts.companyId, session.company.id))
     .orderBy(desc(contracts.createdAt))
 
@@ -36,7 +42,7 @@ export default async function ContractsPage() {
             Novo contrato
           </Button>
         }
-        subtitle="Configure requisitos e acompanhe colaboradores por contrato."
+        subtitle="Cada contrato é de um colaborador. Abra um contrato para ver os dados e anexar os documentos dele."
         title="Contratos"
       />
 
@@ -45,7 +51,7 @@ export default async function ContractsPage() {
           <div className="mvp-section-heading">
             <div>
               <strong>Nenhum contrato ainda</strong>
-              <span>Crie o primeiro contrato para vincular colaboradores e documentos.</span>
+              <span>Crie o primeiro contrato escolhendo o colaborador a quem ele pertence.</span>
             </div>
           </div>
           <Button href="/app/contratos/novo" icon="plus">
@@ -53,39 +59,27 @@ export default async function ContractsPage() {
           </Button>
         </Card>
       ) : (
-        <div className="mvp-contract-list">
-          {items.map((c) => {
-            const status = contractStatusOf(c)
-            return (
-              <Link href={`/app/contratos/${c.id}`} key={c.id}>
-                <Card className="mvp-contract-row">
-                  <span className="entity-icon">
-                    <Icon name="contract" size={19} />
-                  </span>
-                  <div>
-                    <strong>{c.name}</strong>
-                    <span>{c.description ?? "—"}</span>
-                  </div>
-                  <div>
-                    <span>Período</span>
-                    <strong>
-                      {formatDate(c.startDate)} — {c.endDate ? formatDate(c.endDate) : "Indeterminado"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Colaboradores</span>
-                    <strong>
-                      {c.collaborators}
-                      {c.amountCents !== null && ` · ${formatBRL(c.amountCents)}`}
-                    </strong>
-                  </div>
-                  <Badge tone={status.tone}>{status.label}</Badge>
-                  <Icon name="chevron" size={17} />
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
+        <Card className="workspace-table-card">
+          <ContractsTable
+            rows={items.map((c) => {
+              const status = contractStatusOf(c)
+              return {
+                id: c.id,
+                name: c.name,
+                collaboratorId: c.collaboratorId,
+                collaborator: c.collaborator,
+                company: c.legalName,
+                cnpj: c.cnpj ? formatCnpj(c.cnpj) : null,
+                period: `${formatDate(c.startDate)} — ${c.endDate ? formatDate(c.endDate) : "Indeterminado"}`,
+                startDate: c.startDate,
+                amount: c.amountCents !== null ? formatBRL(c.amountCents) : "A definir",
+                amountCents: c.amountCents,
+                statusLabel: status.label,
+                statusTone: status.tone,
+              }
+            })}
+          />
+        </Card>
       )}
     </>
   )

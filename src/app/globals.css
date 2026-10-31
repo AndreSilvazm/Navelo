@@ -1602,3 +1602,146 @@ a.table-person:hover strong { color: var(--zn-primary-strong); }
 .skel-line.short { width: 40%; }
 .skel-line.big { height: 28px; width: 60%; }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+.cell-nowrap { white-space: nowrap; }
+
+/* Tabela do Ant Design: neutraliza o estilo global de table/th/td, que é da tabela própria do projeto */
+.ant-table-wrapper table { min-width: 0; }
+.ant-table-wrapper .ant-table-thead > tr > th { height: auto; font-size: var(--fs-xs); font-weight: 600; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; }
+.ant-table-wrapper .ant-table-tbody > tr > td { height: auto; font-size: var(--fs-base); color: var(--zn-ink-2); }
+.ant-table-wrapper .ant-table-tbody > tr.row-link { cursor: pointer; }
+.workspace-table-card .ant-table-wrapper .ant-pagination { padding: 0 16px; }
+
+.audit-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; transition: opacity .15s; }
+
+/* Custos e reembolsos no dashboard do colaborador */
+.spend { display: grid; gap: 16px; margin-top: 8px; }
+.spend-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.spend-head h2 { margin: 0; font-size: var(--fs-lg, 18px); }
+.dash-legend i.reimb { background: #f59e0b; }
+.spend-chart { display: flex; align-items: flex-end; gap: 8px; height: 180px; padding-top: 8px; }
+.spend-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; }
+.spend-stack { width: 100%; display: flex; flex-direction: column; border-radius: 8px 8px 3px 3px; overflow: hidden; min-height: 0; }
+.spend-stack b { display: block; min-height: 2px; background: var(--zn-primary); }
+.spend-stack b.reimb { background: #f59e0b; }
+.spend-col span { color: var(--text-muted); font-size: 11px; text-transform: capitalize; }
+.spend-projection { display: grid; gap: 10px; }
+.spend-projection > strong { font-size: 28px; color: var(--text); }
+.spend-projection ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.spend-projection li { display: flex; justify-content: space-between; gap: 12px; color: var(--text-muted); }
+.spend-projection li b { color: var(--text); }
+.spend-outliers { margin-top: 18px; display: grid; gap: 8px; }
+.spend-outliers ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.spend-outliers li { display: flex; gap: 8px; align-items: flex-start; }
+.receipt-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.receipt-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+
+/* =====================================================================================
+   Responsivo (celular). Fica no fim do arquivo de propósito: vence as regras anteriores.
+   ===================================================================================== */
+
+/* Abas: nunca alargam a página; se não cabem, rolam dentro delas mesmas */
+.page-tabs { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.page-tabs::-webkit-scrollbar { display: none; }
+.page-tabs a, .page-tabs button { flex: 0 0 auto; white-space: nowrap; }
+
+/* Imagens, vídeos e blocos de código nunca passam do contêiner */
+.workspace-content, .portal-content { min-width: 0; overflow-wrap: anywhere; }
+.workspace-content img, .portal-content img, .workspace-content video, .portal-content video { max-width: 100%; height: auto; }
+
+@media (max-width: 900px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .invoice-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- Tabelas no celular: cada linha vira um cartão "rótulo: valor" ------------------ */
+@media (max-width: 640px) {
+  .ant-table-wrapper .ant-table-container,
+  .ant-table-wrapper .ant-table-content { overflow: visible !important; }
+  .ant-table-wrapper table { display: block; width: 100% !important; min-width: 0 !important; table-layout: auto !important; }
+  .ant-table-wrapper colgroup,
+  .ant-table-wrapper .ant-table-thead { display: none; }
+  .ant-table-wrapper .ant-table-tbody { display: block; }
+  .ant-table-wrapper .ant-table-tbody > tr {
+    display: block; margin: 12px; padding: 2px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface);
+  }
+  .ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder { border: 0; background: transparent; }
+  /* linha de medição interna do antd: só serve para calcular larguras, e aqui desenharia uma barra solta */
+  .ant-table-wrapper .ant-table-tbody > tr.ant-table-measure-row { display: none; }
+  .ant-table-wrapper .ant-table-tbody > tr > td {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    padding: 10px 0 !important; border-bottom: 1px solid var(--border) !important;
+    text-align: right !important; min-width: 0; height: auto; background: transparent !important;
+  }
+  .ant-table-wrapper .ant-table-tbody > tr > td:last-child { border-bottom: 0 !important; }
+  .ant-table-wrapper .ant-table-tbody > tr > td[data-label]::before {
+    content: attr(data-label); flex: 0 0 auto; max-width: 42%; text-align: left;
+    color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .02em; text-transform: uppercase;
+  }
+  /* coluna sem título (a seta de abrir): some, o cartão inteiro já é clicável */
+  .ant-table-wrapper .ant-table-tbody > tr > td:not([data-label]):not(.ant-table-cell-empty) { justify-content: flex-end; }
+  .ant-table-wrapper .ant-table-tbody > tr.row-link > td:not([data-label]) { display: none; }
+  .ant-table-wrapper .ant-table-pagination { flex-wrap: wrap; justify-content: center; padding: 0 12px; }
+  .workspace-table-card { border-radius: var(--radius-lg); }
+}
+
+/* ---- Filtros, formulários e cabeçalhos ---------------------------------------------- */
+@media (max-width: 640px) {
+  .audit-filters > * { flex: 1 1 100% !important; min-width: 0 !important; width: 100%; }
+  .audit-filters .ant-picker, .audit-filters .ant-select { width: 100%; }
+  .workspace-table-toolbar { gap: 10px; }
+  .workspace-table-toolbar .table-search { min-width: 0; }
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .portal-form-actions { flex-direction: column-reverse; align-items: stretch; }
+  .portal-form-actions .button { width: 100%; }
+  .nf-detail-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .nf-detail-actions { flex-wrap: wrap; }
+  .mvp-contract-hero { grid-template-columns: auto 1fr; }
+  .mvp-contract-hero > div:last-child { grid-column: 1 / -1; }
+  .spend-chart { gap: 4px; }
+  .spend-col span { font-size: 9px; }
+  .dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-kpi strong { font-size: var(--fs-xl, 20px); overflow-wrap: anywhere; }
+  .receipt-list li { flex-wrap: wrap; }
+  .info-grid { grid-template-columns: minmax(0, 1fr); }
+  .legal-table-wrap { overflow-x: auto; }
+  /* balão de dica: no celular abre preso às laterais da tela, sem estourar a largura */
+  .info-tip-bubble { position: fixed; left: 16px; right: 16px; bottom: 92px; width: auto; max-width: none; }
+  /* etiqueta de ambiente: menor, para não cobrir o nome da empresa */
+  .env-tag { font-size: 9px; padding: 2px 10px 3px; letter-spacing: .04em; }
+}
+
+@media (max-width: 640px) {
+  /* cabeçalho de cartão do dashboard: título em cima, legenda embaixo, sem quebrar palavra */
+  .dash-card-head { flex-wrap: wrap; }
+  .dash-legend { white-space: nowrap; }
+  .dash-card { padding: 18px; }
+  .spend-head .doc-review-next { white-space: nowrap; }
+}
+
+/* ---- Menu da conta (celular): avatar no topo abre perfil, atalhos e "Sair" -------------- */
+.account-menu { display: none; position: relative; }
+.account-menu summary { list-style: none; cursor: pointer; border-radius: 50%; display: flex; }
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-menu summary:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+.account-menu-panel {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 60; min-width: 232px; padding: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+}
+.account-menu-head { display: grid; gap: 2px; padding: 8px 12px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.account-menu-head strong { color: var(--text); font-size: var(--fs-base); }
+.account-menu-head span { color: var(--text-muted); font-size: var(--fs-sm); }
+.account-menu-panel a, .account-menu-panel button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 12px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); font: inherit; font-size: var(--fs-base); text-align: left; cursor: pointer;
+}
+.account-menu-panel a:hover, .account-menu-panel button:hover { background: var(--zn-hover); }
+.account-menu-panel form:last-child button { color: var(--danger, #b42318); }
+@media (max-width: 760px) {
+  .account-menu { display: block; }
+  .account-desktop { display: none !important; }
+  .nav-desktop-only { display: none !important; }
+  /* o "Sair" não fica mais na barra de baixo: está no menu do avatar */
+  .logout-form { display: none; }
+}

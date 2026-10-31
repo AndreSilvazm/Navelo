@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { and, eq, ne } from "drizzle-orm"
 import { db } from "@/db"
-import { contractCollaborators, contracts, invoices } from "@/db/schema"
+import { contracts, invoices } from "@/db/schema"
 import { MAX_FILE_BYTES, detectMimeType, requireActiveCollaborator } from "@/lib/collaborators"
 import { parseBRLToCents } from "@/lib/format"
 import { IS_PRODUCTION } from "@/lib/app-env"
@@ -53,9 +53,8 @@ export async function createInvoice(_: InvoiceState, formData: FormData): Promis
   // ---- contrato: obrigatório quando o colaborador está em algum
   const mine = await db
     .select({ id: contracts.id })
-    .from(contractCollaborators)
-    .innerJoin(contracts, eq(contracts.id, contractCollaborators.contractId))
-    .where(and(eq(contractCollaborators.collaboratorId, collaborator.id), ne(contracts.status, "canceled")))
+    .from(contracts)
+    .where(and(eq(contracts.collaboratorId, collaborator.id), ne(contracts.status, "canceled")))
   const contractId = text(formData, "contractId")
   if (mine.length > 0 && !mine.some((c) => c.id === contractId)) return { error: "Escolha o contrato a que a nota se refere." }
 

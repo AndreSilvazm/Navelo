@@ -1,6 +1,8 @@
 "use client"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { ConfigProvider } from "antd"
+import ptBR from "antd/locale/pt_BR"
 import { useState, type ReactNode } from "react"
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -19,5 +21,18 @@ export function Providers({ children }: { children: ReactNode }) {
       }),
   )
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      {/* componentes do Ant Design com a cor e a fonte da marca */}
+      <ConfigProvider
+        locale={ptBR}
+        theme={{
+          token: { colorPrimary: "#385bff", colorText: "#101722", fontFamily: "var(--font-inter), system-ui, sans-serif", borderRadius: 8 },
+          components: { Table: { headerBg: "#f8fafc", headerColor: "#64748b", cellPaddingBlock: 16 } },
+        }}
+      >
+        {children}
+      </ConfigProvider>
+    </QueryClientProvider>
+  )
 }

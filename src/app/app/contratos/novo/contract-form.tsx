@@ -1,9 +1,9 @@
 "use client"
 
 import { useActionState, useState, startTransition } from "react"
-import { Button, Card } from "@/figma/ui"
+import { Button, Card, Icon } from "@/figma/ui"
 import { ContractFields } from "../contract-fields"
-import { CollaboratorPicker, type PickerOption } from "@/components/collaborator-picker"
+import type { PickerOption } from "@/components/collaborator-picker"
 import { createContract, type ContractFormValues } from "../actions"
 
 type Option = { id: string; label: string }
@@ -16,7 +16,7 @@ const empty: ContractFormValues = {
   endDate: "",
   amount: "",
   invoiceDueDay: "",
-  collaboratorIds: [],
+  collaboratorId: "",
   docs: [],
 }
 
@@ -24,14 +24,17 @@ export function ContractForm({
   members,
   collaborators,
   currentUserId,
+  preselected,
 }: {
   members: Option[]
   collaborators: PickerOption[]
   currentUserId: string
+  /** colaborador já escolhido (vem do link "Criar contrato" na página dele) */
+  preselected?: string
 }) {
   const [state, action, pending] = useActionState(createContract, undefined)
   // o formulário não é reiniciado depois de um erro (o envio é feito à mão, abaixo)
-  const v = state?.values ?? { ...empty, responsibleUserId: currentUserId }
+  const v = state?.values ?? { ...empty, responsibleUserId: currentUserId, collaboratorId: preselected ?? "" }
   const [docs, setDocs] = useState<{ key: number; name: string; required: boolean }[]>(
     v.docs.map((d, i) => ({ key: i, ...d })),
   )
@@ -65,13 +68,29 @@ export function ContractForm({
       <Card className="mvp-settings-card">
         <div className="mvp-section-heading">
           <div>
-            <strong>Colaboradores</strong>
-            <span>
-              Escolha quem atua neste contrato. Só aparecem colaboradores ativos; você pode adicionar outros depois, na página do contrato.
-            </span>
+            <strong>Colaborador</strong>
+            <span>Cada contrato é de um colaborador, e cada colaborador tem um contrato ativo por vez. Só aparecem colaboradores ativos que ainda não têm contrato.</span>
           </div>
         </div>
-        <CollaboratorPicker initialSelected={v.collaboratorIds} options={collaborators} />
+        {collaborators.length === 0 ? (
+          <p className="form-hint">Nenhum colaborador disponível: todos os ativos já têm contrato, ou ainda não há colaborador ativo.</p>
+        ) : (
+          <label className="field">
+            <span className="field-label">Colaborador do contrato</span>
+            <span className="field-control field-select">
+              <select defaultValue={v.collaboratorId} name="collaboratorId" required>
+                <option value="">Selecione</option>
+                {collaborators.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                    {c.hint ? ` — ${c.hint}` : ""}
+                  </option>
+                ))}
+              </select>
+              <Icon name="chevron" size={16} />
+            </span>
+          </label>
+        )}
       </Card>
 
       <Card className="mvp-settings-card">

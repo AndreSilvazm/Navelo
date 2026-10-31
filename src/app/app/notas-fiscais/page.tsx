@@ -3,12 +3,13 @@ import Link from "next/link"
 import { and, count, desc, eq, inArray, or, sql, sum } from "drizzle-orm"
 import { db } from "@/db"
 import { collaborators, contracts, invoices, memberships, users } from "@/db/schema"
-import { Badge, Card, Icon, PageHeading } from "@/figma/ui"
+import { Card, Icon, PageHeading } from "@/figma/ui"
 import { requireSession } from "@/lib/auth/session"
 import { onlyDigits } from "@/lib/cnpj"
 import { formatBRL } from "@/lib/format"
-import { competenceLabel, invoiceStatusLabel, invoiceStatusTone, type InvoiceStatusValue } from "@/lib/invoice-status"
+import { competenceLabel, type InvoiceStatusValue } from "@/lib/invoice-status"
 import { searchTerms } from "@/lib/search"
+import { InvoicesTable } from "./invoices-table"
 import { containsTerm } from "@/lib/search-sql"
 
 export const metadata: Metadata = { title: "Notas fiscais" }
@@ -139,54 +140,23 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             {q ? `Nenhuma nota encontrada para “${q}”.` : "Nenhuma nota fiscal nesta seção."}
           </p>
         ) : (
-          <div className="workspace-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nota</th>
-                  <th>Colaborador</th>
-                  <th>Contrato</th>
-                  <th>Competência</th>
-                  <th>Valor</th>
-                  <th>Situação</th>
-                  <th>Enviada em</th>
-                  <th>Atualizada em</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <Link href={`/app/notas-fiscais/${r.id}`}>
-                        <strong style={{ whiteSpace: "nowrap" }}>nº {r.number}</strong>
-                      </Link>
-                    </td>
-                    <td>
-                      <strong>{r.collaborator}</strong>
-                      {r.legalName && <div className="form-hint">{r.legalName}</div>}
-                    </td>
-                    <td>{r.contract ?? "—"}</td>
-                    <td>{competenceLabel(r.competence)}</td>
-                    <td>
-                      <strong>{formatBRL(r.amountCents)}</strong>
-                    </td>
-                    <td>
-                      <Badge tone={invoiceStatusTone[r.status]}>{invoiceStatusLabel[r.status]}</Badge>
-                    </td>
-                    <td>{when(r.createdAt)}</td>
-                    {/* data da última mudança de situação: pagamento ou decisão da análise */}
-                    <td>{when(r.status === "paid" ? r.paidAt : r.status === "submitted" ? null : r.reviewedAt) ?? "—"}</td>
-                    <td>
-                      <Link aria-label={`Abrir a nota nº ${r.number}`} href={`/app/notas-fiscais/${r.id}`}>
-                        <Icon name="chevron" size={16} />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <InvoicesTable
+            rows={rows.map((r) => ({
+              id: r.id,
+              number: r.number,
+              collaborator: r.collaborator,
+              company: r.legalName,
+              contract: r.contract,
+              competence: competenceLabel(r.competence),
+              competenceKey: r.competence,
+              amount: formatBRL(r.amountCents),
+              amountCents: r.amountCents,
+              status: r.status,
+              sentAt: when(r.createdAt) ?? "—",
+              // data da última mudança de situação: pagamento ou decisão da análise
+              updatedAt: when(r.status === "paid" ? r.paidAt : r.status === "submitted" ? null : r.reviewedAt) ?? "—",
+            }))}
+          />
         )}
       </Card>
     </>

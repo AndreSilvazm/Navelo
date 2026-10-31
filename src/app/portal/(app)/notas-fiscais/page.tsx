@@ -2,10 +2,11 @@ import type { Metadata } from "next"
 import { desc, eq } from "drizzle-orm"
 import { db } from "@/db"
 import { contracts, invoices } from "@/db/schema"
-import { Badge, Button, Card, PageHeading } from "@/figma/ui"
+import { Button, Card, PageHeading } from "@/figma/ui"
 import { requireActiveCollaborator } from "@/lib/collaborators"
 import { formatBRL } from "@/lib/format"
-import { competenceLabel, invoiceStatusLabel, invoiceStatusTone } from "@/lib/invoice-status"
+import { competenceLabel } from "@/lib/invoice-status"
+import { PortalInvoicesTable } from "./portal-invoices-table"
 
 export const metadata: Metadata = { title: "Minhas notas fiscais" }
 
@@ -70,47 +71,23 @@ export default async function PortalInvoicesPage() {
             Você ainda não enviou nenhuma nota fiscal.
           </p>
         ) : (
-          <div className="workspace-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Competência</th>
-                  <th>Nota</th>
-                  <th>Contrato</th>
-                  <th>Valor</th>
-                  <th>Situação</th>
-                  <th>Enviada em</th>
-                  <th>Atualizada em</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{competenceLabel(r.competence)}</td>
-                    <td>
-                      <strong style={{ whiteSpace: "nowrap" }}>nº {r.number}</strong>
-                      {r.description && <div className="form-hint">{r.description}</div>}
-                      {r.status === "rejected" && r.reviewNote && <div className="form-hint">Motivo da recusa: {r.reviewNote}</div>}
-                    </td>
-                    <td>{r.contract ?? "—"}</td>
-                    <td>{formatBRL(r.amountCents)}</td>
-                    <td>
-                      <Badge tone={invoiceStatusTone[r.status]}>{invoiceStatusLabel[r.status]}</Badge>
-                    </td>
-                    <td>{r.createdAt.toLocaleDateString("pt-BR")}</td>
-                    {/* data da última mudança de situação: pagamento ou decisão da análise */}
-                    <td>{(r.status === "paid" ? r.paidAt : r.status === "submitted" ? null : r.reviewedAt)?.toLocaleDateString("pt-BR") ?? "—"}</td>
-                    <td>
-                      <a className="doc-review-next" href={`/api/notas/${r.id}/arquivo`} rel="noreferrer" target="_blank">
-                        Ver nota
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PortalInvoicesTable
+            rows={rows.map((r) => ({
+              id: r.id,
+              number: r.number,
+              competence: competenceLabel(r.competence),
+              competenceKey: r.competence,
+              description: r.description,
+              rejectionNote: r.status === "rejected" ? r.reviewNote : null,
+              contract: r.contract,
+              amount: formatBRL(r.amountCents),
+              amountCents: r.amountCents,
+              status: r.status,
+              sentAt: r.createdAt.toLocaleDateString("pt-BR"),
+              // data da última mudança de situação: pagamento ou decisão da análise
+              updatedAt: (r.status === "paid" ? r.paidAt : r.status === "submitted" ? null : r.reviewedAt)?.toLocaleDateString("pt-BR") ?? "—",
+            }))}
+          />
         )}
       </Card>
     </>

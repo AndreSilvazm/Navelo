@@ -6,6 +6,7 @@ import { Badge, Button, Icon, TextField, type IconName } from "@/figma/ui"
 import { formatBRL, formatDate } from "@/lib/format"
 import { maskCurrency } from "@/lib/masks"
 import { setMonthlyAmount } from "../actions"
+import { SpendingSection } from "./spending-section"
 import { detailQueryKey, type CollaboratorDetailData } from "./types"
 
 const DAY = 86_400_000
@@ -206,7 +207,7 @@ export function CollaboratorDashboard({ data }: { data: CollaboratorDetailData }
         <Kpi
           hint={paid.length === 0 ? "nenhuma nota paga ainda" : `${paid.length} nota(s) paga(s)`}
           icon="check"
-          label="Total pago"
+          label="Notas pagas"
           tone="green"
           value={formatBRL(paidTotal)}
         />
@@ -258,7 +259,9 @@ export function CollaboratorDashboard({ data }: { data: CollaboratorDetailData }
             </div>
           </div>
           {data.contracts.length === 0 ? (
-            <p className="form-hint">Ainda não está em nenhum contrato. Adicione na página do contrato.</p>
+            <p className="form-hint">
+              Ainda não tem contrato. <a href={`/app/contratos/novo?colaborador=${data.id}`}>Criar contrato →</a>
+            </p>
           ) : (
             <ul className="dash-contracts">
               {data.contracts.map((c) => (
@@ -277,6 +280,8 @@ export function CollaboratorDashboard({ data }: { data: CollaboratorDetailData }
           )}
         </section>
       </div>
+
+      <SpendingSection data={data} />
     </div>
   )
 }

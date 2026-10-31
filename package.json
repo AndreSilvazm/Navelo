@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio",
     "company:create": "tsx --conditions=react-server scripts/create-company.mts",
     "seed:dev": "tsx --conditions=react-server scripts/seed-dev.mts",
+    "seed:dev-empresa": "tsx --conditions=react-server scripts/seed-dev-empresa.mts",
     "files:migrate": "tsx --conditions=react-server scripts/migrate-files-to-storage.mts",
     "db:roles": "tsx scripts/db-roles.mts",
     "env:check": "tsx scripts/env-check.mts",
@@ -19,9 +20,11 @@
     "seed:staging": "tsx --conditions=react-server scripts/seed-staging.mts"
   },
   "dependencies": {
+    "@ant-design/nextjs-registry": "^1.3.0",
     "@node-rs/argon2": "^2.2.2",
     "@supabase/supabase-js": "^2.118.0",
     "@tanstack/react-query": "^5.104.5",
+    "antd": "^6.6.8",
     "drizzle-orm": "^0.45.4",
     "gsap": "^3.15.0",
     "next": "16.3.8",

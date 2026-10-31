@@ -246,3 +246,35 @@ export async function sendInvoicePaidEmail(input: { to: string; name?: string | 
     button: { label: "Ver minhas notas", url: `${SITE_URL}/portal/notas-fiscais` },
   })
 }
+
+// Decisão sobre um pedido de reembolso: aprovado, recusado (com o motivo) ou pago
+export async function sendReimbursementEmail(input: {
+  to: string
+  name?: string | null
+  companyName: string
+  kind: "approved" | "rejected" | "paid"
+  descricao: string
+  valorCentavos: number
+  motivo?: string
+}) {
+  const text = {
+    approved: { subject: "Reembolso aprovado", heading: "Reembolso aprovado", body: `**${input.companyName}** aprovou o seu pedido de reembolso. O pagamento será registrado em seguida.` },
+    rejected: { subject: "Reembolso recusado", heading: "Reembolso recusado", body: `**${input.companyName}** não aprovou o seu pedido de reembolso.` },
+    paid: { subject: "Reembolso pago", heading: "Reembolso pago", body: `**${input.companyName}** registrou o pagamento do seu reembolso. O crédito na sua conta depende do banco.` },
+  }[input.kind]
+  await sendEmailSafe({
+    to: input.to,
+    sender: "sistema",
+    subject: `${text.subject}: ${brl(input.valorCentavos)}`,
+    preheader: input.kind === "rejected" ? "Veja o motivo no portal." : `${brl(input.valorCentavos)}.`,
+    heading: text.heading,
+    greeting: greet(input.name),
+    paragraphs: [text.body],
+    facts: [
+      { label: "Despesa", value: input.descricao },
+      { label: "Valor", value: brl(input.valorCentavos) },
+      ...(input.kind === "rejected" && input.motivo ? [{ label: "Motivo", value: input.motivo }] : []),
+    ],
+    button: { label: "Ver meus reembolsos", url: `${SITE_URL}/portal/reembolsos` },
+  })
+}

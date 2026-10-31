@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { logout } from "@/app/login/actions"
+import { AccountMenu } from "@/components/account-menu"
 import { CompanySwitcher } from "@/components/company-switcher"
 import type { PortalSwitcherData } from "@/lib/portal-companies"
 import { initialsOf } from "@/lib/initials"
@@ -19,11 +20,14 @@ const portalNav: Array<{
   label: string
   short?: string
   to: string
+  /** só na barra lateral do computador: no celular o item vai para o menu do avatar */
+  desktopOnly?: boolean
 }> = [
   { icon: "dashboard", label: "Início", to: "/portal" },
   { icon: "contract", label: "Contrato", to: "/portal/contrato" },
   { icon: "document", label: "Notas fiscais", short: "Notas", to: "/portal/notas-fiscais" },
-  { icon: "upload", label: "Documentos", short: "Docs", to: "/portal/documentos" },
+  { icon: "payment", label: "Reembolsos", short: "Reemb.", to: "/portal/reembolsos" },
+  { icon: "upload", label: "Documentos", short: "Docs", to: "/portal/documentos", desktopOnly: true },
   { icon: "people", label: "Perfil", to: "/portal/perfil" },
 ]
 
@@ -49,7 +53,7 @@ export function PortalShell({
           {portalNav.map((item) => (
             <NavLink
               className={({ isActive }) =>
-                `portal-nav-item ${isActive ? "active" : ""}`
+                `portal-nav-item ${isActive ? "active" : ""} ${item.desktopOnly ? "nav-desktop-only" : ""}`
               }
               end={item.to === "/portal"}
               key={item.to}
@@ -97,9 +101,13 @@ export function PortalShell({
           </div>
           <CompanySwitcher {...switcher} />
           <div className="portal-top-actions">
-            <Link aria-label="Meu perfil" href="/portal/perfil">
+            <Link aria-label="Meu perfil" className="account-desktop" href="/portal/perfil">
               <Avatar initials={initialsOf(user.name)} name={user.name} size="sm" tone={0} />
             </Link>
+            <AccountMenu links={[
+                { href: "/portal/perfil", label: "Meu perfil", icon: "people" },
+                { href: "/portal/documentos", label: "Meus documentos", icon: "upload" },
+              ]} name={user.name} subtitle={company.name} tone={0} />
           </div>
         </header>
         <main className="portal-content" id="conteudo">

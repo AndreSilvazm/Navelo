@@ -7,7 +7,7 @@ import { getCollaboratorDetail } from "./detail-data"
 export const metadata: Metadata = { title: "Colaborador" }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const TABS: DetailTab[] = ["andamento", "dashboard", "geral", "documentos", "bancarios", "notas"]
+const TABS: DetailTab[] = ["andamento", "dashboard", "geral", "documentos", "bancarios", "notas", "reembolsos"]
 
 // Só a primeira carga passa pelo servidor. Depois, abas e documentos vêm do cache do
 // navegador (TanStack Query), sem nova ida ao banco enquanto o dado estiver fresco.
@@ -24,8 +24,8 @@ export default async function CollaboratorPage({
   const data = await getCollaboratorDetail(session.company.id, id, session.user.id)
   if (!data) notFound()
 
-  // sem aba na URL abre o andamento; notas fiscais só para colaborador ativo
+  // sem aba na URL abre o andamento; notas fiscais e reembolsos só para colaborador ativo
   const requested = TABS.find((t) => t === aba) ?? "andamento"
-  const tab = requested === "notas" && data.status !== "active" ? "andamento" : requested
+  const tab = (requested === "notas" || requested === "reembolsos") && data.status !== "active" ? "andamento" : requested
   return <CollaboratorDetail data={data} tab={tab} />
 }

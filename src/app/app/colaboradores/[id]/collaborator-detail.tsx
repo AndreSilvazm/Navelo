@@ -16,9 +16,10 @@ import { CollaboratorDashboard } from "./collaborator-dashboard"
 import { DocumentReview, documentUrl } from "./document-review"
 import { InvoicesTab } from "./invoices-tab"
 import { ProgressTimeline } from "./progress-timeline"
+import { ReimbursementsTab } from "./reimbursements-tab"
 import { detailQueryKey, isReadyForApproval, type CollaboratorDetailData } from "./types"
 
-export type DetailTab = "andamento" | "dashboard" | "geral" | "documentos" | "bancarios" | "notas"
+export type DetailTab = "andamento" | "dashboard" | "geral" | "documentos" | "bancarios" | "notas" | "reembolsos"
 
 const TABS: { id: DetailTab; label: string }[] = [
   { id: "andamento", label: "Andamento do cadastro" },
@@ -27,6 +28,7 @@ const TABS: { id: DetailTab; label: string }[] = [
   { id: "documentos", label: "Documentos" },
   { id: "bancarios", label: "Dados bancários" },
   { id: "notas", label: "Notas fiscais" },
+  { id: "reembolsos", label: "Reembolsos" },
 ]
 
 const fetchDetail = async (id: string): Promise<CollaboratorDetailData> => {
@@ -66,7 +68,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
 
   // notas fiscais só existem para quem já está ativo
   const invoicesEnabled = data.status === "active"
-  const activeTab: DetailTab = tab === "notas" && !invoicesEnabled ? "andamento" : tab
+  const activeTab: DetailTab = (tab === "notas" || tab === "reembolsos") && !invoicesEnabled ? "andamento" : tab
 
   // mantém a URL compartilhável sem recarregar
   useEffect(() => {
@@ -126,6 +128,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
   const canApprove = canDecide && data.status === "in_review" && isReadyForApproval(data.checklist)
   const canReject = canDecide && (data.status === "profile_pending" || data.status === "documents_pending" || data.status === "in_review")
   const inReview = data.invoices.filter((i) => i.status === "submitted").length // notas esperando decisão
+  const reimbursementsInReview = data.reimbursements.filter((r) => r.status === "submitted").length // reembolsos esperando decisão
   const canSuspend = canDecide && data.status === "active"
   const busy = approve.isPending || decide.isPending || reopen.isPending || reactivate.isPending
   const address = [
@@ -215,7 +218,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
 
       <nav aria-label="Seções do colaborador" className="page-tabs">
         {TABS.map((t) => {
-          const disabled = t.id === "notas" && !invoicesEnabled
+          const disabled = (t.id === "notas" || t.id === "reembolsos") && !invoicesEnabled
           return (
             <button
               aria-current={activeTab === t.id ? "page" : undefined}
@@ -227,12 +230,15 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
             >
               {t.label}
               {t.id === "notas" && inReview > 0 && <span className="page-tab-count">{inReview}</span>}
+              {t.id === "reembolsos" && reimbursementsInReview > 0 && <span className="page-tab-count">{reimbursementsInReview}</span>}
             </button>
           )
         })}
       </nav>
 
       {activeTab === "dashboard" && <CollaboratorDashboard data={data} />}
+
+      {activeTab === "reembolsos" && <ReimbursementsTab data={data} />}
 
       {activeTab === "andamento" && <ProgressTimeline data={data} onReview={() => setTab("documentos")} />}
 

@@ -1,6 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { type TableColumnsType } from "antd"
+import { DataTable } from "@/components/data-table"
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { Avatar, Badge, Card, Icon } from "@/figma/ui"
@@ -54,6 +57,50 @@ function Progress({ row }: { row: CollaboratorRow }) {
   )
 }
 
+const PAGE_SIZE = 25
+const byText = (a?: string | null, b?: string | null) => (a ?? "").localeCompare(b ?? "", "pt-BR")
+
+// Colunas da tabela (Ant Design): uma informação por coluna
+const columns: TableColumnsType<CollaboratorRow> = [
+  {
+    title: "CNPJ",
+    dataIndex: "cnpj",
+    render: (cnpj: string | null) => <strong style={{ whiteSpace: "nowrap" }}>{cnpj ? formatCnpj(cnpj) : "—"}</strong>,
+    sorter: (a, b) => byText(a.cnpj, b.cnpj),
+  },
+  {
+    title: "Colaborador",
+    dataIndex: "name",
+    render: (_: string, r) => (
+      <Link className="table-person" href={detailHref(r.id)} onClick={(e) => e.stopPropagation()}>
+        <Avatar initials={initialsOf(r.name)} name={r.name} size="sm" tone={r.name.length} />
+        <strong>{r.name}</strong>
+      </Link>
+    ),
+    sorter: (a, b) => byText(a.name, b.name),
+  },
+  { title: "E-mail", dataIndex: "email", render: (email: string) => <span style={{ whiteSpace: "nowrap" }}>{email}</span> },
+  { title: "Cargo", dataIndex: "jobTitle", render: (cargo: string | null) => cargo ?? "—", sorter: (a, b) => byText(a.jobTitle, b.jobTitle) },
+  {
+    title: "Empresa",
+    dataIndex: "legalName",
+    render: (nome: string | null) => <strong>{nome ?? "—"}</strong>,
+    sorter: (a, b) => byText(a.legalName, b.legalName),
+  },
+  { title: "Documentos aprovados", key: "docs", render: (_: unknown, r) => <Progress row={r} /> },
+  { title: "Status", dataIndex: "status", render: (_: unknown, r) => <Badge tone={statusTone[r.status]}>{statusLabel[r.status]}</Badge> },
+  {
+    title: "",
+    key: "abrir",
+    width: 48,
+    render: (_: unknown, r) => (
+      <Link aria-label={`Abrir ${r.name}`} href={detailHref(r.id)} onClick={(e) => e.stopPropagation()}>
+        <Icon name="chevron" size={16} />
+      </Link>
+    ),
+  },
+]
+
 // Lista com abas, busca e dois modos de visualização. O primeiro carregamento vem pronto
 // do servidor; trocar de aba, buscar e voltar à tela usam o cache do TanStack Query
 // (sem ir ao banco de novo enquanto o dado estiver fresco).
@@ -63,6 +110,7 @@ export function CollaboratorsView({
   initial: { aba: ListTab; q: string; visao: View; data: CollaboratorListData }
 }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [aba, setAba] = useState<ListTab>(initial.aba)
   const [visao, setVisao] = useState<View>(initial.visao)
   const [input, setInput] = useState(initial.q)
@@ -156,53 +204,16 @@ export function CollaboratorsView({
               ))}
             </div>
           ) : (
-            <div className="workspace-table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Colaborador</th>
-                    <th>Cargo</th>
-                    <th>Empresa / CNPJ</th>
-                    <th>Documentos aprovados</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <Link className="table-person" href={detailHref(r.id)}>
-                          <Avatar initials={initialsOf(r.name)} name={r.name} size="sm" tone={r.name.length} />
-                          <span style={{ display: "grid" }}>
-                            <strong>{r.name}</strong>
-                            <span className="form-hint">{r.email}</span>
-                          </span>
-                        </Link>
-                      </td>
-                      <td>{r.jobTitle ?? "—"}</td>
-                      <td>
-                        <div className="mvp-company-cell">
-                          <strong>{r.legalName ?? "—"}</strong>
-                          <span>{r.cnpj ? `CNPJ ${formatCnpj(r.cnpj)}` : "CNPJ não informado"}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <Progress row={r} />
-                      </td>
-                      <td>
-                        <Badge tone={statusTone[r.status]}>{statusLabel[r.status]}</Badge>
-                      </td>
-                      <td>
-                        <Link aria-label={`Abrir ${r.name}`} href={detailHref(r.id)}>
-                          <Icon name="chevron" size={16} />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<CollaboratorRow>
+              // o andamento dos documentos só interessa a quem está analisando o cadastro
+              columns={aba === "revisao" ? columns : columns.filter((c) => c.key !== "docs")}
+              dataSource={rows}
+              locale={{ emptyText: "Nenhum colaborador" }}
+              onRow={(r) => ({ className: "row-link", onClick: () => router.push(detailHref(r.id)) })}
+              pagination={rows.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, showSizeChanger: false } : false}
+              rowKey="id"
+              scroll={{ x: "max-content" }}
+            />
           )}
         </div>
       </Card>

@@ -1,7 +1,7 @@
 import "server-only"
 import { and, asc, eq, inArray, ne } from "drizzle-orm"
 import { db } from "@/db"
-import { contractCollaborators, contractRequirements, contracts, users } from "@/db/schema"
+import { contractRequirements, contracts, users } from "@/db/schema"
 
 export type CollaboratorContract = {
   id: string
@@ -29,10 +29,9 @@ export async function getCollaboratorContracts(collaboratorId: string): Promise<
       invoiceDueDay: contracts.invoiceDueDay,
       responsible: users.name,
     })
-    .from(contractCollaborators)
-    .innerJoin(contracts, eq(contracts.id, contractCollaborators.contractId))
+    .from(contracts)
     .leftJoin(users, eq(users.id, contracts.responsibleUserId))
-    .where(and(eq(contractCollaborators.collaboratorId, collaboratorId), ne(contracts.status, "canceled")))
+    .where(and(eq(contracts.collaboratorId, collaboratorId), ne(contracts.status, "canceled")))
     .orderBy(asc(contracts.name))
   if (rows.length === 0) return []
 

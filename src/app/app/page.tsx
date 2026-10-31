@@ -41,7 +41,7 @@ export default async function OverviewPage() {
         status: contracts.status,
         startDate: contracts.startDate,
         endDate: contracts.endDate,
-        people: sql<number>`(select count(*)::int from contract_collaborators cc where cc.contract_id = ${contracts.id})`,
+        people: sql<number>`(case when ${contracts.collaboratorId} is null then 0 else 1 end)`,
       })
       .from(contracts)
       .where(and(eq(contracts.companyId, companyId), ne(contracts.status, "canceled")))

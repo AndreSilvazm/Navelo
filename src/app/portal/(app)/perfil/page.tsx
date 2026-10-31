@@ -2,8 +2,9 @@ import type { Metadata } from "next"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "@/db"
 import { bankChangeRequests } from "@/db/schema"
+import Link from "next/link"
 import { Avatar, Badge, Card, PageHeading } from "@/figma/ui"
-import { requireActiveCollaborator } from "@/lib/collaborators"
+import { getDocumentChecklist, requireActiveCollaborator } from "@/lib/collaborators"
 import { formatCnpj, onlyDigits } from "@/lib/cnpj"
 import { initialsOf } from "@/lib/initials"
 import { BankForm } from "./bank-form"
@@ -34,6 +35,11 @@ export default async function PortalProfilePage() {
   const emAnalise = pedido?.status === "pending" ? pedido : null
   const recusado = pedido?.status === "rejected" ? pedido : null
   const company = session.company.tradeName ?? session.company.legalName
+
+  // resumo dos documentos enviados (os documentos moram dentro do perfil)
+  const checklist = await getDocumentChecklist(c.id, session.company.id)
+  const docCount = (status: string) => checklist.filter(({ document }) => document?.status === status).length
+  const docsMissing = checklist.filter(({ document }) => !document).length
 
   const phone = c.phone ? onlyDigits(c.phone).replace(/^(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3") : null
   const address = [
@@ -66,6 +72,24 @@ export default async function PortalProfilePage() {
             <Field label="Contratante" value={company} />
             <Field label="Ativo desde" value={c.approvedAt ? c.approvedAt.toLocaleDateString("pt-BR") : null} />
           </dl>
+        </Card>
+
+        <Card className="mvp-settings-card">
+          <div className="mvp-section-heading">
+            <div>
+              <strong>Meus documentos</strong>
+              <span>Os documentos que você enviou para {company} e a situação de cada um.</span>
+            </div>
+            <Link className="doc-review-next" href="/portal/documentos">
+              Abrir meus documentos →
+            </Link>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <Badge tone="success">{docCount("approved")} aprovado(s)</Badge>
+            <Badge tone="warning">{docCount("submitted")} em análise</Badge>
+            {docCount("rejected") > 0 && <Badge tone="danger">{docCount("rejected")} recusado(s)</Badge>}
+            {docsMissing > 0 && <Badge tone="neutral">{docsMissing} a enviar</Badge>}
+          </div>
         </Card>
 
         <Card className="mvp-settings-card">

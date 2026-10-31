@@ -76,6 +76,16 @@ export function invoicePath(companyId: string, collaboratorId: string, invoiceId
   return `empresas/${companyId}/colaboradores/${collaboratorId}/notas/${invoiceId}.${extensao(mimeType)}`
 }
 
+/** Arquivo anexado ao contrato pelo corporativo */
+export function contractFilePath(companyId: string, contractId: string, fileId: string, mimeType: string) {
+  return `empresas/${companyId}/contratos/${contractId}/${fileId}.${extensao(mimeType)}`
+}
+
+/** Comprovante de um pedido de reembolso */
+export function reimbursementFilePath(companyId: string, collaboratorId: string, reimbursementId: string, fileId: string, mimeType: string) {
+  return `empresas/${companyId}/colaboradores/${collaboratorId}/reembolsos/${reimbursementId}/${fileId}.${extensao(mimeType)}`
+}
+
 export async function putFile(path: string, bytes: Buffer, contentType: string) {
   let { error } = await storage().upload(path, bytes, { contentType, upsert: true })
   // bucket ainda não criado neste projeto: cria (privado) e tenta de novo, uma vez

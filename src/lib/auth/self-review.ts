@@ -1,7 +1,7 @@
 import "server-only"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/db"
-import { collaborators, invoices, memberships } from "@/db/schema"
+import { collaborators, invoices, memberships, reimbursements } from "@/db/schema"
 
 /**
  * Ninguém decide sobre o próprio caso.
@@ -30,5 +30,16 @@ export async function isOwnInvoice(invoiceId: string, userId: string) {
   return !!row
 }
 
+/** Mesma regra, a partir do pedido de reembolso */
+export async function isOwnReimbursement(reimbursementId: string, userId: string) {
+  const [row] = await db
+    .select({ id: reimbursements.id })
+    .from(reimbursements)
+    .innerJoin(collaborators, eq(collaborators.id, reimbursements.collaboratorId))
+    .innerJoin(memberships, eq(memberships.id, collaborators.membershipId))
+    .where(and(eq(reimbursements.id, reimbursementId), eq(memberships.userId, userId)))
+  return !!row
+}
+
 export const SELF_REVIEW_ERROR =
-  "Você não pode analisar o próprio cadastro nem as próprias notas. Peça a outra pessoa do corporativo."
+  "Você não pode analisar o próprio cadastro, as próprias notas nem os próprios reembolsos. Peça a outra pessoa do corporativo."

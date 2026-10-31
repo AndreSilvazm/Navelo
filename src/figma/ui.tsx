@@ -532,6 +532,7 @@ export function TextField({
   label,
   leading,
   mask,
+  max,
   maxLength,
   name,
   onValueChange,
@@ -550,6 +551,8 @@ export function TextField({
   // conteúdo à esquerda do campo, no lugar do ícone (ex.: logo do banco)
   leading?: ReactNode
   mask?: MaskName
+  // limite do campo de data/número (ex.: a data de hoje)
+  max?: string
   maxLength?: number
   name?: string
   // com `value` o campo é controlado: use junto com onValueChange (recebe o texto já com máscara)
@@ -574,6 +577,7 @@ export function TextField({
           autoComplete={autoComplete}
           defaultValue={value === undefined ? (mask && defaultValue ? masks[mask](defaultValue) : defaultValue) : undefined}
           inputMode={mask ? "numeric" : undefined}
+          max={max}
           maxLength={maxLength}
           name={name}
           onChange={(e) => {

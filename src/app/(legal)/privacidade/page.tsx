@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { LEGAL, PRIVACY_CHANNEL } from "@/lib/legal"
+import { LegalBasisTable } from "./legal-basis-table"
 
 export const metadata: Metadata = {
   title: "Política de Privacidade",
@@ -73,42 +74,7 @@ export default function PrivacyPage() {
       </p>
 
       <h2>3. Para que usamos e em que base legal</h2>
-      <div className="legal-table-wrap">
-        <table className="legal-table">
-          <thead>
-            <tr>
-              <th>Finalidade</th>
-              <th>Base legal (LGPD, art. 7º)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Criar e manter a sua conta, autenticar o acesso e entregar as funcionalidades da plataforma</td>
-              <td>Execução de contrato ou de procedimentos preliminares (inciso V)</td>
-            </tr>
-            <tr>
-              <td>Gerir cadastro, documentos, contratos, notas fiscais e pagamentos da relação entre você e a empresa contratante</td>
-              <td>Execução de contrato (inciso V), em nome da controladora</td>
-            </tr>
-            <tr>
-              <td>Guardar documentos e registros fiscais e atender exigências de autoridades</td>
-              <td>Cumprimento de obrigação legal ou regulatória (inciso II)</td>
-            </tr>
-            <tr>
-              <td>Proteger contas, prevenir fraudes e abusos, manter registros de segurança e de acesso</td>
-              <td>Legítimo interesse (inciso IX) e obrigação legal (Marco Civil, art. 15, quando aplicável)</td>
-            </tr>
-            <tr>
-              <td>Defender direitos em processos judiciais, administrativos ou arbitrais</td>
-              <td>Exercício regular de direitos (inciso VI)</td>
-            </tr>
-            <tr>
-              <td>Qualquer uso que dependa da sua escolha</td>
-              <td>Consentimento (inciso I), que você pode retirar a qualquer momento</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <LegalBasisTable />
       <p>Não vendemos dados pessoais e não os usamos para publicidade nem para criar perfis de consumo.</p>
 
       <h2>4. Com quem compartilhamos</h2>

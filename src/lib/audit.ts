@@ -32,11 +32,24 @@ export type AuditAction =
   | "invoice.approved"
   | "invoice.rejected"
   | "invoice.paid"
+  // reembolsos
+  | "reimbursement.approved"
+  | "reimbursement.rejected"
+  | "reimbursement.paid"
+  | "reimbursement.viewed"
+  | "reimbursement.downloaded"
+  // arquivos do contrato
+  | "contract_file.uploaded"
+  | "contract_file.deleted"
+  | "contract_file.viewed"
+  | "contract_file.downloaded"
+  // contrato
+  | "contract.ended"
   // dinheiro e acesso
   | "collaborator.amount_changed"
   | "password.changed"
 
-export type AuditTargetType = "collaborator" | "document" | "invoice" | "bank_change" | "user"
+export type AuditTargetType = "collaborator" | "document" | "invoice" | "bank_change" | "user" | "reimbursement" | "contract" | "contract_file"
 
 type AuditInput = {
   action: AuditAction

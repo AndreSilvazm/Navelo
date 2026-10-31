@@ -155,6 +155,13 @@
       "when": 1793249750556,
       "tag": "0021_rls_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793419522769,
+      "tag": "0022_contrato_por_colaborador_e_reembolsos",
+      "breakpoints": true
     }
   ]
 }

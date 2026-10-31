@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { Providers } from "@/components/providers";
 import { EnvTag } from "@/components/env-tag";
 import { IS_PRODUCTION } from "@/lib/app-env";
@@ -61,7 +62,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a className="skip-link" href="#conteudo">
           Pular para o conteúdo
         </a>
-        <Providers>{children}</Providers>
+        {/* AntdRegistry: o CSS do Ant Design já vai no HTML do servidor, sem piscar sem estilo */}
+        <AntdRegistry>
+          <Providers>{children}</Providers>
+        </AntdRegistry>
         <EnvTag />
       </body>
     </html>

@@ -87,6 +87,17 @@ export type CollaboratorDetailData = {
     paidAt: string | null
     paidBy: string | null
   }[]
+  /** pedidos de reembolso do colaborador (sem os comprovantes, que vêm pela rota própria) */
+  reimbursements: {
+    id: string
+    category: string
+    description: string
+    amountCents: number
+    expenseDate: string // AAAA-MM-DD
+    status: "submitted" | "approved" | "rejected" | "paid"
+    createdAt: string
+    paidAt: string | null
+  }[]
   monthlyAmountCents: number | null
   monthlyAmountUpdatedAt: string | null
   monthlyAmountUpdatedBy: string | null
