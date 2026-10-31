@@ -7,6 +7,7 @@ import { Icon, PageHeading } from "@/figma/ui"
 import { CORPORATE_ROLES, requireSession } from "@/lib/auth/session"
 import { ROLE_LABELS } from "@/lib/auth/permissions"
 import { collaboratorOption } from "../options"
+import { storageEnabled } from "@/lib/storage"
 import { ContractForm } from "./contract-form"
 
 export const metadata: Metadata = { title: "Novo contrato" }
@@ -55,6 +56,7 @@ export default async function NewContractPage({ searchParams }: { searchParams: 
       <ContractForm
         collaborators={active.map(collaboratorOption)}
         currentUserId={session.user.id}
+        storageOn={storageEnabled()}
         preselected={active.some((c) => c.id === colaborador) ? colaborador : undefined}
         members={members.map((m) => ({ id: m.id, label: `${m.name} · ${ROLE_LABELS[m.role]}` }))}
       />

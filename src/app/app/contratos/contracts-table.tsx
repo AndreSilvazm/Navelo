@@ -82,7 +82,6 @@ export function ContractsTable({ rows }: { rows: ContractRow[] }) {
         dataSource={filtered}
         locale={{ emptyText: query ? `Nenhum contrato encontrado para “${query}”.` : "Nenhum contrato" }}
         onRow={(r) => ({ className: "row-link", onClick: () => router.push(href(r.id)) })}
-        pagination={filtered.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
         rowKey="id"
         scroll={{ x: "max-content" }}
       />

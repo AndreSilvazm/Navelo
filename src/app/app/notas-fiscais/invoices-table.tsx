@@ -65,7 +65,6 @@ export function InvoicesTable({ rows }: { rows: InvoiceRow[] }) {
     <DataTable<InvoiceRow>
       columns={columns}
       dataSource={rows}
-      pagination={rows.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
       rowKey="id"
       scroll={{ x: "max-content" }}
     />

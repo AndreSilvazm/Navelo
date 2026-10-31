@@ -10,6 +10,7 @@ export type InviteStatus = "pending" | "accepted" | "revoked" | "expired"
 
 export type InviteRow = {
   id: string
+  name: string | null
   email: string
   role: string // cargo ou papel, já em texto
   sentAt: string
@@ -22,6 +23,7 @@ const label: Record<InviteStatus, string> = { pending: "Pendente", accepted: "Ac
 const tone = { pending: "warning", accepted: "success", revoked: "neutral", expired: "danger" } as const
 
 const columns: TableColumnsType<InviteRow> = [
+  { title: "Nome", dataIndex: "name", render: (nome: string | null) => nome ?? "—" },
   { title: "E-mail", dataIndex: "email", render: (email: string) => <strong>{email}</strong> },
   { title: "Cargo", dataIndex: "role" },
   { title: "Enviado em", dataIndex: "sentAt" },
@@ -52,18 +54,17 @@ const columns: TableColumnsType<InviteRow> = [
   },
 ]
 
-const searchParts = (r: InviteRow) => [r.email, r.role, r.sentBy, label[r.status], r.sentAt]
+const searchParts = (r: InviteRow) => [r.name, r.email, r.role, r.sentBy, label[r.status], r.sentAt]
 
 export function InvitationsTable({ rows }: { rows: InviteRow[] }) {
   const { query, setQuery, filtered } = useTableSearch(rows, searchParts)
   return (
     <>
-      <TableSearch label="Buscar convites" onChange={setQuery} placeholder="Buscar por e-mail, cargo ou quem enviou..." value={query} />
+      <TableSearch label="Buscar convites" onChange={setQuery} placeholder="Buscar por nome, e-mail, cargo ou quem enviou..." value={query} />
       <DataTable<InviteRow>
         columns={columns}
         dataSource={filtered}
         locale={{ emptyText: query ? `Nenhum convite encontrado para “${query}”.` : "Nenhum convite" }}
-        pagination={filtered.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
         rowKey="id"
         scroll={{ x: "max-content" }}
       />

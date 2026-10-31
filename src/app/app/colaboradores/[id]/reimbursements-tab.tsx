@@ -115,7 +115,6 @@ export function ReimbursementsTab({ data }: { data: CollaboratorDetailData }) {
               dataSource={filtered}
               locale={{ emptyText: query ? `Nenhum pedido encontrado para “${query}”.` : "Nenhum pedido" }}
               onRow={(r) => ({ className: "row-link", onClick: () => router.push(href(r.id)) })}
-              pagination={filtered.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
               rowKey="id"
               scroll={{ x: "max-content" }}
             />

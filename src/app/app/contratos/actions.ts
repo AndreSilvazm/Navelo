@@ -23,7 +23,6 @@ export type ContractFormValues = {
   amount: string
   invoiceDueDay: string
   collaboratorId: string
-  docs: { name: string; required: boolean }[]
 }
 export type ContractState = { error?: string; values?: ContractFormValues } | undefined
 
@@ -100,9 +99,6 @@ async function parseContractFields(values: ContractFields, companyId: string) {
 export async function createContract(_: ContractState, formData: FormData): Promise<ContractState> {
   const session = await requireSession("corporate")
 
-  // documentos vêm em listas paralelas (nome[i] ↔ obrigatório[i])
-  const docNames = formData.getAll("docName").map((v) => String(v).trim())
-  const docRequired = formData.getAll("docRequired").map((v) => String(v) === "1")
   const values: ContractFormValues = {
     name: text(formData, "name"),
     description: text(formData, "description"),
@@ -112,7 +108,6 @@ export async function createContract(_: ContractState, formData: FormData): Prom
     amount: text(formData, "amount"),
     invoiceDueDay: text(formData, "invoiceDueDay"),
     collaboratorId: text(formData, "collaboratorId"),
-    docs: docNames.map((name, i) => ({ name, required: docRequired[i] ?? true })),
   }
   const fail = (error: string): ContractState => ({ error, values })
 
@@ -120,9 +115,21 @@ export async function createContract(_: ContractState, formData: FormData): Prom
   if (!parsed.ok) return fail(parsed.error)
   const { amountCents, invoiceDueDay, responsibleUserId } = parsed.data
 
-  const docs = values.docs.filter((d) => d.name)
-  if (docs.length > MAX_DOCS) return fail(`No máximo ${MAX_DOCS} documentos por contrato.`)
-  if (docs.some((d) => d.name.length > 120)) return fail("Nome de documento muito longo.")
+  // o documento do contrato (contrato de adesão em que a pessoa foi contratada): PDF ou imagem. É
+  // obrigatório; só fica de fora num ambiente sem armazenamento de arquivos (desenvolvimento local).
+  const file = formData.get("file")
+  const temArquivo = file instanceof File && file.size > 0
+  let documento: { content: Buffer; mimeType: string; name: string } | null = null
+  if (temArquivo) {
+    if (file.size > MAX_FILE_BYTES) return fail("O documento do contrato passa de 5 MB.")
+    const content = Buffer.from(await file.arrayBuffer())
+    const mimeType = detectMimeType(content)
+    if (!mimeType) return fail("Envie o documento do contrato em PDF, PNG ou JPG.")
+    if (!storageEnabled()) return fail("O armazenamento de arquivos não está configurado neste ambiente.")
+    documento = { content, mimeType, name: file.name.slice(0, 200) }
+  } else if (storageEnabled()) {
+    return fail("Anexe o documento do contrato (o contrato de adesão em que a pessoa foi contratada).")
+  }
 
   // o contrato é de UM colaborador: ativo, desta empresa e sem outro contrato ativo
   if (!values.collaboratorId) return fail("Escolha o colaborador do contrato.")
@@ -137,12 +144,24 @@ export async function createContract(_: ContractState, formData: FormData): Prom
     .where(and(eq(contracts.collaboratorId, collaborator.id), eq(contracts.status, "active")))
   if (already) return fail("Esse colaborador já tem um contrato ativo. Encerre o atual antes de criar outro.")
 
-  let contractId: string
+  const contractId = randomUUID()
+  const fileId = randomUUID()
+  const path = documento ? contractFilePath(session.company.id, contractId, fileId, documento.mimeType) : null
+  if (documento && path) {
+    try {
+      await putFile(path, documento.content, documento.mimeType)
+    } catch (e) {
+      console.error("createContract: storage", e)
+      return fail(IS_PRODUCTION ? "Não foi possível guardar o documento. Tente novamente em instantes." : `Não foi possível guardar o documento: ${describeError(e)}`)
+    }
+  }
+
   try {
-    contractId = await db.transaction(async (tx) => {
-      const [contract] = await tx
+    await db.transaction(async (tx) => {
+      await tx
         .insert(contracts)
         .values({
+          id: contractId,
           companyId: session.company.id,
           name: values.name.slice(0, 120),
           description: values.description.slice(0, 200) || null,
@@ -154,18 +173,29 @@ export async function createContract(_: ContractState, formData: FormData): Prom
           createdByUserId: session.user.id,
           collaboratorId: collaborator.id,
         })
-        .returning({ id: contracts.id })
 
-      if (docs.length)
-        await tx.insert(contractRequirements).values(docs.map((d) => ({ contractId: contract.id, name: d.name, required: d.required })))
-
-      return contract.id
+      if (documento && path)
+        await tx.insert(contractFiles).values({
+          id: fileId,
+          companyId: session.company.id,
+          contractId,
+          title: "Contrato de adesão",
+          fileName: documento.name,
+          mimeType: documento.mimeType,
+          sizeBytes: documento.content.length,
+          storagePath: path,
+          uploadedByUserId: session.user.id,
+        })
     })
   } catch (e) {
+    if (path) await removeFile(path) // não deixa arquivo órfão no bucket
     if (isUniqueViolation(e)) return fail(isCollaboratorKey(e) ? "Esse colaborador já tem um contrato ativo." : "Já existe um contrato com esse nome.")
     throw e
   }
 
+  if (documento) {
+    await auditFromSession(session, { action: "contract_file.uploaded", targetType: "contract_file", targetId: fileId, targetLabel: "Contrato de adesão", details: { contratoId: contractId, arquivo: documento.name } })
+  }
   revalidatePath("/app/contratos")
   redirect(`/app/contratos/${contractId}`)
 }

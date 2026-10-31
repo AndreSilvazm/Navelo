@@ -1,9 +1,10 @@
 "use client"
 
-import { useActionState, useState, startTransition } from "react"
-import { Button, Card, Icon } from "@/figma/ui"
+import { useActionState, startTransition } from "react"
+import { Button, Card, UploadZone } from "@/figma/ui"
 import { ContractFields } from "../contract-fields"
 import type { PickerOption } from "@/components/collaborator-picker"
+import { CollaboratorSelect } from "@/components/collaborator-select"
 import { createContract, type ContractFormValues } from "../actions"
 
 type Option = { id: string; label: string }
@@ -17,7 +18,6 @@ const empty: ContractFormValues = {
   amount: "",
   invoiceDueDay: "",
   collaboratorId: "",
-  docs: [],
 }
 
 export function ContractForm({
@@ -25,21 +25,19 @@ export function ContractForm({
   collaborators,
   currentUserId,
   preselected,
+  storageOn,
 }: {
   members: Option[]
   collaborators: PickerOption[]
   currentUserId: string
   /** colaborador já escolhido (vem do link "Criar contrato" na página dele) */
   preselected?: string
+  /** há armazenamento de arquivos neste ambiente (então o documento do contrato é obrigatório) */
+  storageOn: boolean
 }) {
   const [state, action, pending] = useActionState(createContract, undefined)
   // o formulário não é reiniciado depois de um erro (o envio é feito à mão, abaixo)
   const v = state?.values ?? { ...empty, responsibleUserId: currentUserId, collaboratorId: preselected ?? "" }
-  const [docs, setDocs] = useState<{ key: number; name: string; required: boolean }[]>(
-    v.docs.map((d, i) => ({ key: i, ...d })),
-  )
-  const [nextKey, setNextKey] = useState(v.docs.length)
-
   return (
     <form
       onSubmit={(e) => {
@@ -69,77 +67,33 @@ export function ContractForm({
         <div className="mvp-section-heading">
           <div>
             <strong>Colaborador</strong>
-            <span>Cada contrato é de um colaborador, e cada colaborador tem um contrato ativo por vez. Só aparecem colaboradores ativos que ainda não têm contrato.</span>
+            <span>Cada contrato é de um colaborador, e cada colaborador tem um contrato ativo por vez. Só aparecem colaboradores ativos que ainda não têm contrato. Busque pelo nome ou pelo CNPJ.</span>
           </div>
         </div>
         {collaborators.length === 0 ? (
           <p className="form-hint">Nenhum colaborador disponível: todos os ativos já têm contrato, ou ainda não há colaborador ativo.</p>
         ) : (
-          <label className="field">
+          <div className="field">
             <span className="field-label">Colaborador do contrato</span>
-            <span className="field-control field-select">
-              <select defaultValue={v.collaboratorId} name="collaboratorId" required>
-                <option value="">Selecione</option>
-                {collaborators.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                    {c.hint ? ` — ${c.hint}` : ""}
-                  </option>
-                ))}
-              </select>
-              <Icon name="chevron" size={16} />
-            </span>
-          </label>
+            <CollaboratorSelect initial={v.collaboratorId} options={collaborators} />
+          </div>
         )}
       </Card>
 
       <Card className="mvp-settings-card">
         <div className="mvp-section-heading">
           <div>
-            <strong>Documentos específicos deste contrato</strong>
-            <span>Além dos documentos que a empresa já exige de todo colaborador (Configurações).</span>
+            <strong>Documento do contrato</strong>
+            <span>
+              O contrato de adesão em que a pessoa foi contratada. PDF, PNG ou JPG, até 5 MB. Outros documentos deste contrato podem ser
+              anexados depois, na aba Arquivos da página do contrato.
+            </span>
           </div>
-          <Button
-            icon="plus"
-            onClick={() => {
-              setDocs((d) => [...d, { key: nextKey, name: "", required: true }])
-              setNextKey((k) => k + 1)
-            }}
-            variant="ghost"
-          >
-            Adicionar documento
-          </Button>
         </div>
-        {docs.length === 0 ? (
-          <p className="form-hint">Nenhum documento específico. Você pode adicionar depois.</p>
+        {storageOn ? (
+          <UploadZone accept=".pdf,.png,.jpg,.jpeg" formats="PDF, PNG ou JPG • Máx. 5 MB" maxSizeMB={5} name="file" required title="Arraste o contrato de adesão aqui" />
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {docs.map((d) => (
-              <div className="doc-row" key={d.key}>
-                <input
-                  aria-label="Nome do documento"
-                  className="doc-row-name"
-                  maxLength={120}
-                  name="docName"
-                  onChange={(e) => setDocs((list) => list.map((x) => (x.key === d.key ? { ...x, name: e.target.value } : x)))}
-                  placeholder="Ex.: Certidão negativa trabalhista"
-                  value={d.name}
-                />
-                <select
-                  aria-label="Obrigatoriedade"
-                  name="docRequired"
-                  onChange={(e) => setDocs((list) => list.map((x) => (x.key === d.key ? { ...x, required: e.target.value === "1" } : x)))}
-                  value={d.required ? "1" : "0"}
-                >
-                  <option value="1">Obrigatório</option>
-                  <option value="0">Opcional</option>
-                </select>
-                <button aria-label="Remover documento" className="upload-remove" onClick={() => setDocs((list) => list.filter((x) => x.key !== d.key))} type="button">
-                  Remover
-                </button>
-              </div>
-            ))}
-          </div>
+          <p className="form-hint">O armazenamento de arquivos não está configurado neste ambiente: o contrato será criado sem o documento.</p>
         )}
       </Card>
 

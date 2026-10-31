@@ -93,7 +93,6 @@ export function ReimbursementsTable({ rows }: { rows: ReimbursementRow[] }) {
         dataSource={filtered}
         locale={{ emptyText: query ? `Nenhum pedido encontrado para “${query}”.` : "Nenhum pedido nesta seção." }}
         onRow={(r) => ({ className: "row-link", onClick: () => router.push(href(r.id)) })}
-        pagination={filtered.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
         rowKey="id"
         scroll={{ x: "max-content" }}
       />

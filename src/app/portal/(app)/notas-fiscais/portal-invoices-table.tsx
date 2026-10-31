@@ -59,7 +59,6 @@ export function PortalInvoicesTable({ rows }: { rows: PortalInvoiceRow[] }) {
         columns={columns}
         dataSource={filtered}
         locale={{ emptyText: query ? `Nenhuma nota encontrada para “${query}”.` : "Nenhuma nota" }}
-        pagination={filtered.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
         rowKey="id"
         scroll={{ x: "max-content" }}
       />

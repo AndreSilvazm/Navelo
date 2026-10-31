@@ -39,6 +39,7 @@ export async function InvitationsHistory({ roles }: { roles: MembershipRole[] })
                   : "—"
         return {
           id: inv.id,
+          name: inv.name,
           email: inv.email,
           role: inv.jobTitle ?? ROLE_LABELS[inv.role],
           sentAt: fmt(inv.createdAt),

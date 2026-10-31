@@ -70,7 +70,6 @@ export function ReimbursementForm({ today }: { today: string }) {
           <TextField label="Valor (R$)" mask="currency" name="amount" placeholder="0,00" required />
           <TextField label="Data da despesa" max={today} name="expenseDate" required type="date" />
           <TextField label="Estabelecimento (opcional)" maxLength={120} name="merchant" placeholder="Ex.: Hotel Central" />
-          <TextField hint="Viagem, projeto ou evento a que a despesa pertence" label="Viagem ou projeto (opcional)" maxLength={120} name="trip" placeholder="Ex.: Visita ao cliente em Curitiba" />
         </div>
         <label className="field" style={{ marginTop: 16 }}>
           <span className="field-label">Descrição</span>

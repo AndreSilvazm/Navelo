@@ -57,7 +57,6 @@ function Progress({ row }: { row: CollaboratorRow }) {
   )
 }
 
-const PAGE_SIZE = 25
 const byText = (a?: string | null, b?: string | null) => (a ?? "").localeCompare(b ?? "", "pt-BR")
 
 // Colunas da tabela (Ant Design): uma informação por coluna
@@ -210,7 +209,6 @@ export function CollaboratorsView({
               dataSource={rows}
               locale={{ emptyText: "Nenhum colaborador" }}
               onRow={(r) => ({ className: "row-link", onClick: () => router.push(detailHref(r.id)) })}
-              pagination={rows.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, showSizeChanger: false } : false}
               rowKey="id"
               scroll={{ x: "max-content" }}
             />
