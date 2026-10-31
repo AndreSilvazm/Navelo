@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { PortalShell } from "@/figma/portal-shell"
 import { requireActiveCollaborator } from "@/lib/collaborators"
 import { getPortalCompanies } from "@/lib/portal-companies"
+import { ttlCached } from "@/lib/ttl-cache"
 
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 
@@ -10,7 +11,8 @@ export const metadata: Metadata = { robots: { index: false, follow: false } }
 // levados para /portal/primeiro-acesso (onde dá para trocar de empresa).
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const { session } = await requireActiveCollaborator()
-  const switcher = await getPortalCompanies(session)
+  // o seletor muda pouco: em cache por 30 s (a empresa atual entra na chave, pois define qual aparece marcada)
+  const switcher = await ttlCached(`switcher:${session.user.id}:${session.company.id}`, 30_000, () => getPortalCompanies(session))
 
   return (
     <PortalShell

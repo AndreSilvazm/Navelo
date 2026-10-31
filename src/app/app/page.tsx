@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { and, count, desc, eq, gte, inArray, isNull, gt, ne, sql, sum } from "drizzle-orm"
+import { and, count, desc, eq, isNull, gt, ne, sql, sum } from "drizzle-orm"
 import { db } from "@/db"
 import { bankChangeRequests, collaborators, contracts, invitations, invoices, memberships, users } from "@/db/schema"
 import { Badge, Button, PageHeading } from "@/figma/ui"
@@ -29,10 +29,9 @@ export default async function OverviewPage() {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const seriesStart = new Date(now.getFullYear(), now.getMonth() - (MONTHS_BACK - 1), 1)
-  const seriesFrom = `${key(seriesStart)}-01`
 
   // consultas da visão geral: reaproveitadas por 30 s (a chave inclui a empresa)
-  const [counts, contractRows, byStatus, paidThisMonth, series, pendingInvites, recent, bankRequests] = await ttlCached(`overview:${companyId}`, 30_000, () => Promise.all([
+  const [counts, contractRows, invoiceAgg, pendingInvites, recent, bankRequests] = await ttlCached(`overview:${companyId}`, 30_000, () => Promise.all([
     getTabCounts(companyId),
     db
       .select({
@@ -46,20 +45,18 @@ export default async function OverviewPage() {
       .from(contracts)
       .where(and(eq(contracts.companyId, companyId), ne(contracts.status, "canceled")))
       .orderBy(desc(contracts.createdAt)),
+    // UMA consulta para as notas: por situação e mês de competência. Dela saem o total por situação,
+    // o pago no mês e a série dos últimos meses (antes eram 3 consultas).
     db
-      .select({ status: invoices.status, n: count(), total: sum(invoices.amountCents).mapWith(Number) })
+      .select({
+        month: sql<string>`left(${invoices.competence}::text, 7)`,
+        status: invoices.status,
+        n: count(),
+        total: sum(invoices.amountCents).mapWith(Number),
+        paidThisMonth: sql<string>`coalesce(sum(${invoices.amountCents}) filter (where ${invoices.status} = 'paid' and ${invoices.paidAt} >= ${monthStart.toISOString()}::timestamptz), 0)`.mapWith(Number),
+      })
       .from(invoices)
       .where(eq(invoices.companyId, companyId))
-      .groupBy(invoices.status),
-    db
-      .select({ total: sum(invoices.amountCents).mapWith(Number) })
-      .from(invoices)
-      .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "paid"), gte(invoices.paidAt, monthStart))),
-    // notas aprovadas e pagas por mês de competência (últimos meses)
-    db
-      .select({ month: sql<string>`left(${invoices.competence}::text, 7)`, status: invoices.status, total: sum(invoices.amountCents).mapWith(Number) })
-      .from(invoices)
-      .where(and(eq(invoices.companyId, companyId), inArray(invoices.status, ["approved", "paid"]), gte(invoices.competence, seriesFrom)))
       .groupBy(sql`left(${invoices.competence}::text, 7)`, invoices.status),
     db
       .select({ n: count() })
@@ -89,7 +86,13 @@ export default async function OverviewPage() {
       .groupBy(bankChangeRequests.collaboratorId),
   ]))
 
-  const inv = (s: string) => byStatus.find((x) => x.status === s) ?? { n: 0, total: 0 }
+  const inv = (s: string) => {
+    const rows = invoiceAgg.filter((x) => x.status === s)
+    return { n: rows.reduce((t, x) => t + x.n, 0), total: rows.reduce((t, x) => t + x.total, 0) }
+  }
+  const paidThisMonth = invoiceAgg.reduce((t, x) => t + x.paidThisMonth, 0)
+  // notas aprovadas e pagas por mês de competência (últimos meses)
+  const series = invoiceAgg.filter((x) => (x.status === "approved" || x.status === "paid") && x.month >= key(seriesStart))
   const activeContracts = contractRows.filter((c) => contractStatusOf(c).label === "Ativo")
   const linkedPeople = activeContracts.reduce((n, c) => n + c.people, 0)
   const in30 = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10)
@@ -161,7 +164,7 @@ export default async function OverviewPage() {
           </Link>
           <Link className="dash-kpi kpi-link" href="/app/notas-fiscais?aba=pagas">
             <span className="dash-kpi-label">Pago no mês</span>
-            <strong>{formatBRL(paidThisMonth[0]?.total ?? 0)}</strong>
+            <strong>{formatBRL(paidThisMonth)}</strong>
             <small>{formatBRL(inv("paid").total)} no total</small>
           </Link>
         </div>

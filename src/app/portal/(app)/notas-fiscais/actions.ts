@@ -1,7 +1,7 @@
 "use server"
 
 import { randomUUID } from "node:crypto"
-import { revalidatePath } from "next/cache"
+import { revalidatePath } from "@/lib/revalidate"
 import { redirect } from "next/navigation"
 import { and, eq, ne } from "drizzle-orm"
 import { db } from "@/db"

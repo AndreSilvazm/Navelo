@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { and, asc, desc, eq, inArray } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { db } from "@/db"
 import { collaborators, contractFiles, contractRequirements, contracts, invoices, memberships, users } from "@/db/schema"
 import { Badge, Button, Card, Icon } from "@/figma/ui"
@@ -65,11 +66,13 @@ export default async function ContractPage({
   const tab: TabId = TABS.find((t) => t.id === aba)?.id ?? "geral"
 
   // contrato, colaborador, exigências e arquivos, tudo em paralelo (uma ida ao banco)
+  const ownerUser = alias(users, "owner_user")
   const [[contract], docs, files, members, invoiceRows] = await Promise.all([
     db
       .select({
         c: contracts,
         responsible: users.name,
+        ownerName: ownerUser.name,
         person: {
           id: collaborators.id,
           status: collaborators.status,
@@ -81,6 +84,8 @@ export default async function ContractPage({
       .from(contracts)
       .leftJoin(users, eq(users.id, contracts.responsibleUserId))
       .leftJoin(collaborators, eq(collaborators.id, contracts.collaboratorId))
+      .leftJoin(memberships, eq(memberships.id, collaborators.membershipId))
+      .leftJoin(ownerUser, eq(ownerUser.id, memberships.userId))
       .where(and(eq(contracts.id, id), eq(contracts.companyId, session.company.id))),
     db.select().from(contractRequirements).where(eq(contractRequirements.contractId, id)).orderBy(asc(contractRequirements.createdAt)),
     db
@@ -117,14 +122,7 @@ export default async function ContractPage({
   if (!contract) notFound()
 
   const { c, person } = contract
-  const [owner] = person?.id
-    ? await db
-        .select({ name: users.name })
-        .from(collaborators)
-        .innerJoin(memberships, eq(memberships.id, collaborators.membershipId))
-        .innerJoin(users, eq(users.id, memberships.userId))
-        .where(eq(collaborators.id, person.id))
-    : []
+  const owner = contract.ownerName ? { name: contract.ownerName } : undefined
   const status = contractStatusOf(c)
   const canEdit = c.status !== "canceled"
   const now = new Date().getTime()

@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath } from "@/lib/revalidate"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/db"
 import { reimbursements } from "@/db/schema"
