@@ -17,7 +17,8 @@ import { DocumentReview, documentUrl } from "./document-review"
 import { InvoicesTab } from "./invoices-tab"
 import { ProgressTimeline } from "./progress-timeline"
 import { ReimbursementsTab } from "./reimbursements-tab"
-import { detailQueryKey, isReadyForApproval, type CollaboratorDetailData } from "./types"
+import { KIND_LABEL } from "@/lib/bank-labels"
+import { detailQueryKey, isReadyForApproval, type BankAccountDTO, type CollaboratorDetailData } from "./types"
 
 export type DetailTab = "andamento" | "dashboard" | "geral" | "documentos" | "bancarios" | "notas" | "reembolsos"
 
@@ -57,7 +58,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
   // painel de motivo: recusar o acesso (antes da liberação) ou suspendê-lo (depois)
   const [panel, setPanel] = useState<"reject" | "suspend" | null>(null)
   // recusa do pedido de troca de conta (pede o motivo no mesmo tipo de modal)
-  const [rejectingBank, setRejectingBank] = useState(false)
+  const [rejectingBank, setRejectingBank] = useState<string | null>(null) // id do pedido que está sendo recusado
 
   const { data = initial } = useQuery({
     queryKey: detailQueryKey(initial.id),
@@ -116,7 +117,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
       return rejectBankChange(id, form)
     },
     onSuccess: () => {
-      setRejectingBank(false)
+      setRejectingBank(null)
       refresh()
     },
   })
@@ -291,100 +292,128 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
         description="O colaborador verá o motivo e poderá enviar os dados de novo."
         error={rejectBank.isError}
         label="Motivo da recusa"
-        onClose={() => setRejectingBank(false)}
-        onConfirm={(reason) => rejectBank.mutate({ id: data.pendingBankChange!.id, reason })}
-        open={rejectingBank && !!data.pendingBankChange}
+        onClose={() => setRejectingBank(null)}
+        onConfirm={(reason) => rejectingBank && rejectBank.mutate({ id: rejectingBank, reason })}
+        open={rejectingBank !== null}
         pending={rejectBank.isPending}
-        title="Recusar a troca de conta"
+        title="Recusar o pedido de conta"
       />
 
       {activeTab === "bancarios" && (
-        <Card className="mvp-settings-card">
-          <div className="mvp-section-heading">
-            <div>
-              <strong>Dados bancários</strong>
-              <span>Conta para os pagamentos, informada pelo colaborador. Deve ser da própria empresa (mesmo CNPJ).</span>
+        <div style={{ display: "grid", gap: 24 }}>
+          {data.pendingBankChanges.map((req) => {
+            const nova = !data.bankAccounts[req.kind]
+            return (
+              <Card className="mvp-settings-card" key={req.id}>
+                <div className="bank-request">
+                  <div className="mvp-section-heading">
+                    <div>
+                      <strong>
+                        {nova ? "Conta nova" : "Troca de conta"} esperando decisão: {KIND_LABEL[req.kind]}
+                      </strong>
+                      <span>
+                        Pedida pelo colaborador em {dateTime(req.createdAt)}. Confirme com a pessoa por um canal que você já conhece antes de
+                        aprovar: trocar a conta de pagamento é o golpe mais comum nesse tipo de operação.
+                      </span>
+                    </div>
+                    <Badge tone="warning">Em análise</Badge>
+                  </div>
+                  <AccountFields account={req} label="Banco pedido" />
+                  {canDecide ? (
+                    <div className="portal-form-actions" style={{ marginTop: 16 }}>
+                      <Button disabled={approveBank.isPending || rejectBank.isPending} onClick={() => setRejectingBank(req.id)} variant="secondary">
+                        Recusar
+                      </Button>
+                      <Button
+                        disabled={approveBank.isPending || rejectBank.isPending}
+                        icon="check"
+                        loading={approveBank.isPending && approveBank.variables === req.id}
+                        onClick={() => approveBank.mutate(req.id)}
+                      >
+                        {nova ? "Aprovar conta" : "Aprovar troca"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="form-hint" style={{ marginTop: 12 }}>
+                      Pedido seu: quem decide é outra pessoa do corporativo.
+                    </p>
+                  )}
+                </div>
+              </Card>
+            )
+          })}
+
+          <Card className="mvp-settings-card">
+            <div className="mvp-section-heading">
+              <div>
+                <strong>{KIND_LABEL.pj}</strong>
+                <span>Conta para os pagamentos, informada pelo colaborador. Deve ser da própria empresa (mesmo CNPJ).</span>
+              </div>
+              {data.bankAccounts.pj ? <Badge tone="success">Cadastrada</Badge> : <Badge tone="neutral">Não informada</Badge>}
             </div>
-          </div>
-          {data.pendingBankChange && (
-            <div className="bank-request">
-              <div className="mvp-section-heading">
-                <div>
-                  <strong>Troca de conta esperando decisão</strong>
-                  <span>
-                    Pedida pelo colaborador em {dateTime(data.pendingBankChange.createdAt)}. Confirme com a pessoa por um canal
-                    que você já conhece antes de aprovar: troca de conta é o golpe mais comum nesse tipo de operação.
-                  </span>
-                </div>
-                <Badge tone="warning">Em análise</Badge>
+            {data.bankAccounts.pj ? (
+              <AccountFields account={data.bankAccounts.pj} holder={data.legalName} holderDoc={data.cnpj ? formatCnpj(data.cnpj) : null} holderDocLabel="CNPJ do titular" label="Banco" />
+            ) : (
+              <p className="form-hint">O colaborador ainda não informou a conta da empresa.</p>
+            )}
+          </Card>
+
+          <Card className="mvp-settings-card">
+            <div className="mvp-section-heading">
+              <div>
+                <strong>{KIND_LABEL.pf}</strong>
+                <span>Opcional. O colaborador informa se quiser, no cadastro ou depois, pelo perfil dele. Mudanças passam pela sua aprovação.</span>
               </div>
-              <dl className="info-grid">
-                <div className="info-field">
-                  <dt>Banco pedido</dt>
-                  <dd className="bank-line">
-                    <BankLogo code={data.pendingBankChange.bankCode} name={data.pendingBankChange.bankName} size={32} />
-                    <span>
-                      {data.pendingBankChange.bankCode} · {data.pendingBankChange.bankName}
-                    </span>
-                  </dd>
-                </div>
-                <Field label="Tipo de conta" value={data.pendingBankChange.bankAccountType === "savings" ? "Conta poupança" : "Conta corrente"} />
-                <Field label="Agência" value={data.pendingBankChange.bankAgency} />
-                <Field label="Conta" value={data.pendingBankChange.bankAccount} />
-                <div className="info-field info-wide">
-                  <dt>Chave PIX</dt>
-                  <dd>{data.pendingBankChange.pixKey || "Não informada"}</dd>
-                </div>
-              </dl>
-              {canDecide ? (
-                <div className="portal-form-actions" style={{ marginTop: 16 }}>
-                  <Button disabled={approveBank.isPending || rejectBank.isPending} onClick={() => setRejectingBank(true)} variant="secondary">
-                    Recusar troca
-                  </Button>
-                  <Button
-                    disabled={approveBank.isPending || rejectBank.isPending}
-                    icon="check"
-                    loading={approveBank.isPending}
-                    onClick={() => approveBank.mutate(data.pendingBankChange!.id)}
-                  >
-                    Aprovar troca
-                  </Button>
-                </div>
-              ) : (
-                <p className="form-hint" style={{ marginTop: 12 }}>
-                  Pedido seu: quem decide é outra pessoa do corporativo.
-                </p>
-              )}
+              {data.bankAccounts.pf ? <Badge tone="success">Cadastrada</Badge> : <Badge tone="neutral">Não informada</Badge>}
             </div>
-          )}
-          {data.bankCode ? (
-            <dl className="info-grid">
-              <div className="info-field">
-                <dt>Banco</dt>
-                <dd className="bank-line">
-                  <BankLogo code={data.bankCode} name={data.bankName} size={32} />
-                  <span>
-                    {data.bankCode} · {data.bankName}
-                  </span>
-                </dd>
-              </div>
-              <Field label="Tipo de conta" value={data.bankAccountType === "savings" ? "Conta poupança" : "Conta corrente"} />
-              <Field label="Agência" value={data.bankAgency} />
-              <Field label="Conta" value={data.bankAccount} />
-              <Field label="Titular" value={data.legalName} />
-              <Field label="CNPJ do titular" value={data.cnpj ? formatCnpj(data.cnpj) : null} />
-              <div className="info-field info-wide">
-                <dt>Chave PIX</dt>
-                <dd>{data.pixKey || "Não informada"}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="form-hint">O colaborador ainda não informou os dados bancários.</p>
-          )}
-        </Card>
+            {data.bankAccounts.pf ? (
+              <AccountFields account={data.bankAccounts.pf} holder={data.name} label="Banco" />
+            ) : (
+              <p className="form-hint">O colaborador não informou uma conta pessoa física.</p>
+            )}
+          </Card>
+        </div>
       )}
 
       {activeTab === "notas" && invoicesEnabled && <InvoicesTab data={data} />}
     </>
+  )
+}
+
+// Os campos de uma conta bancária (a que está em vigor ou a que foi pedida)
+function AccountFields({
+  account,
+  label,
+  holder,
+  holderDoc,
+  holderDocLabel,
+}: {
+  account: BankAccountDTO
+  label: string
+  holder?: string | null
+  holderDoc?: string | null
+  holderDocLabel?: string
+}) {
+  return (
+    <dl className="info-grid">
+      <div className="info-field">
+        <dt>{label}</dt>
+        <dd className="bank-line">
+          <BankLogo code={account.bankCode} name={account.bankName} size={32} />
+          <span>
+            {account.bankCode} · {account.bankName}
+          </span>
+        </dd>
+      </div>
+      <Field label="Tipo de conta" value={account.bankAccountType === "savings" ? "Conta poupança" : "Conta corrente"} />
+      <Field label="Agência" value={account.bankAgency} />
+      <Field label="Conta" value={account.bankAccount} />
+      {holder !== undefined && <Field label="Titular" value={holder} />}
+      {holderDocLabel && <Field label={holderDocLabel} value={holderDoc} />}
+      <div className="info-field info-wide">
+        <dt>Chave PIX</dt>
+        <dd>{account.pixKey || "Não informada"}</dd>
+      </div>
+    </dl>
   )
 }

@@ -1,17 +1,16 @@
 "use client"
 
 import { useActionState, useRef, useState } from "react"
-import { BankFields, type BankValues } from "@/components/bank-fields"
 import { Button, Icon, TextField } from "@/figma/ui"
 import { UFS } from "@/lib/br-states"
 import { isValidCnpj, onlyDigits } from "@/lib/cnpj"
-import { maskAccount, maskAgency, maskBankCode, maskCep, maskCnpj, maskPhone } from "@/lib/masks"
+import { maskCep, maskCnpj, maskPhone } from "@/lib/masks"
 import { saveProfile } from "./actions"
 
 type Values = Record<string, string>
 type Lookup = { state: "idle" | "loading" | "ok" | "error"; message?: string }
 
-const FIELDS = ["cnpj", "legalName", "tradeName", "phone", "zipCode", "street", "number", "complement", "district", "city", "state", "bankCode", "bankName", "bankAgency", "bankAccount", "bankAccountType", "pixKey"] as const
+const FIELDS = ["cnpj", "legalName", "tradeName", "phone", "zipCode", "street", "number", "complement", "district", "city", "state"] as const
 
 async function lookup<T>(url: string): Promise<T | null> {
   try {
@@ -55,9 +54,6 @@ export function ProfileForm({
     cnpj: maskCnpj(saved.cnpj ?? ""),
     phone: maskPhone(saved.phone ?? ""),
     zipCode: maskCep(saved.zipCode ?? ""),
-    bankCode: maskBankCode(saved.bankCode ?? ""),
-    bankAgency: maskAgency(saved.bankAgency ?? ""),
-    bankAccount: maskAccount(saved.bankAccount ?? ""),
   }))
   const [cnpjLookup, setCnpjLookup] = useState<Lookup>({ state: "idle" })
   const [cepLookup, setCepLookup] = useState<Lookup>({ state: "idle" })
@@ -235,12 +231,6 @@ export function ProfileForm({
           </span>
         </label>
       </div>
-
-      <strong>Dados bancários</strong>
-      <p className="form-hint" style={{ marginTop: -12 }}>
-        Para os pagamentos. A conta precisa ser da sua empresa (mesmo CNPJ).
-      </p>
-      <BankFields onChange={(patch) => setF((prev) => ({ ...prev, ...patch }))} values={f as BankValues} />
 
       <div className="portal-form-actions">
         <Button disabled={pending} loading={pending} type="submit">

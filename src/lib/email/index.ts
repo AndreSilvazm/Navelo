@@ -146,27 +146,32 @@ export async function sendBankChangeRequestedEmail(input: {
   name?: string | null
   collaboratorName: string
   collaboratorId: string
+  /** "conta PJ (da empresa)" ou "conta pessoa física" */
+  tipo?: string
+  /** é uma conta nova (ainda não havia deste tipo), e não a troca de uma existente */
+  nova?: boolean
   de: EmailFact[]
   para: EmailFact[]
 }) {
+  const tipo = input.tipo ?? "conta bancária"
   await sendEmailSafe({
     to: input.to,
     sender: "seguranca",
-    subject: `Pedido de troca de conta bancária: ${input.collaboratorName}`,
+    subject: `Pedido de ${input.nova ? "nova conta" : "troca de conta"} bancária (${tipo}): ${input.collaboratorName}`,
     preheader: "Confirme com a pessoa antes de aprovar.",
-    heading: "Troca de conta esperando análise",
+    heading: input.nova ? "Conta nova esperando análise" : "Troca de conta esperando análise",
     greeting: greet(input.name),
     paragraphs: [
-      `**${input.collaboratorName}** pediu para trocar a conta que recebe os pagamentos. Nada muda enquanto você não aprovar.`,
+      `**${input.collaboratorName}** pediu para ${input.nova ? `cadastrar uma ${tipo}` : `trocar a ${tipo}`} usada nos pagamentos. Nada muda enquanto você não aprovar.`,
       "Antes de aprovar, confirme com a pessoa por um canal que você já conhece (telefone ou presencialmente). Trocar a conta é o golpe mais comum nesse tipo de operação, e e-mail invadido é a porta de entrada.",
     ],
-    factsTitle: "Conta nova pedida",
+    factsTitle: `Conta pedida (${tipo})`,
     facts: input.para,
     button: { label: "Analisar o pedido", url: `${SITE_URL}/app/colaboradores/${input.collaboratorId}?aba=bancarios` },
   })
 }
 
-export async function sendBankChangeApprovedEmail(input: { to: string; name?: string | null; companyName: string; conta: EmailFact[] }) {
+export async function sendBankChangeApprovedEmail(input: { to: string; name?: string | null; companyName: string; conta: EmailFact[]; tipo?: string }) {
   await sendEmailSafe({
     to: input.to,
     sender: "seguranca",
@@ -174,14 +179,14 @@ export async function sendBankChangeApprovedEmail(input: { to: string; name?: st
     preheader: "Os próximos pagamentos vão para a conta nova.",
     heading: "Conta bancária atualizada",
     greeting: greet(input.name),
-    paragraphs: [`**${input.companyName}** aprovou a troca da sua conta. Os próximos pagamentos vão para a conta abaixo.`],
-    factsTitle: "Conta em vigor",
+    paragraphs: [`**${input.companyName}** aprovou a ${input.tipo ? `sua ${input.tipo}` : "troca da sua conta"}. A conta abaixo passa a valer nos próximos pagamentos.`],
+    factsTitle: input.tipo ? `Conta em vigor (${input.tipo})` : "Conta em vigor",
     facts: input.conta,
     warning: `**Não foi você quem pediu essa troca?** Avise a empresa e escreva para ${MAILBOX.suporte} imediatamente.`,
   })
 }
 
-export async function sendBankChangeRejectedEmail(input: { to: string; name?: string | null; companyName: string; motivo: string }) {
+export async function sendBankChangeRejectedEmail(input: { to: string; name?: string | null; companyName: string; motivo: string; tipo?: string }) {
   await sendEmailSafe({
     to: input.to,
     sender: "sistema",
@@ -189,7 +194,7 @@ export async function sendBankChangeRejectedEmail(input: { to: string; name?: st
     preheader: "A conta anterior continua valendo.",
     heading: "Troca de conta recusada",
     greeting: greet(input.name),
-    paragraphs: [`**${input.companyName}** recusou o pedido de troca da sua conta bancária. A conta anterior continua recebendo os pagamentos.`],
+    paragraphs: [`**${input.companyName}** recusou o pedido da sua ${input.tipo ?? "conta bancária"}. Nada mudou nos pagamentos.`],
     facts: [{ label: "Motivo informado", value: input.motivo }],
     button: { label: "Corrigir e enviar de novo", url: `${SITE_URL}/portal/perfil` },
   })

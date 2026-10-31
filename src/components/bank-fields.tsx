@@ -18,7 +18,8 @@ type Lookup = { state: "idle" | "loading" | "ok" | "error"; message?: string }
 
 // Campos dos dados bancários (cadastro inicial e perfil): busca do banco pelo nome ou pelo
 // código, logo do banco, agência, conta, tipo e PIX. O estado fica com quem usa (controlado).
-export function BankFields({ values, onChange }: { values: BankValues; onChange: (patch: Partial<BankValues>) => void }) {
+// `prefix` permite dois blocos na mesma tela (ex.: "pf_" para a conta pessoa física): muda o nome dos campos.
+export function BankFields({ values, onChange, prefix = "" }: { values: BankValues; onChange: (patch: Partial<BankValues>) => void; prefix?: string }) {
   const [lookup, setLookup] = useState<Lookup>({ state: "idle" })
   const lastCode = useRef(values.bankCode)
 
@@ -27,7 +28,7 @@ export function BankFields({ values, onChange }: { values: BankValues; onChange:
     lastCode.current = bank.code
     setLookup({ state: "ok" })
     onChange({ bankCode: bank.code, bankName: bank.name })
-    document.getElementsByName("bankAgency")[0]?.focus()
+    document.getElementsByName(`${prefix}bankAgency`)[0]?.focus()
   }
 
   // código do banco -> nome do banco (consulta pública)
@@ -53,7 +54,7 @@ export function BankFields({ values, onChange }: { values: BankValues; onChange:
     if (!data?.found || !data.name) return setLookup({ state: "error", message: "Banco não encontrado. Digite o nome do banco." })
     onChange({ bankName: data.name })
     setLookup({ state: "ok" })
-    document.getElementsByName("bankAgency")[0]?.focus()
+    document.getElementsByName(`${prefix}bankAgency`)[0]?.focus()
   }
 
   return (
@@ -65,7 +66,7 @@ export function BankFields({ values, onChange }: { values: BankValues; onChange:
           hint={lookup.state === "loading" ? "Buscando…" : "Ou digite o código, se já souber."}
           label="Código do banco"
           mask="bankCode"
-          name="bankCode"
+          name={`${prefix}bankCode`}
           onValueChange={onCode}
           placeholder="Ex.: 341"
           required
@@ -74,17 +75,17 @@ export function BankFields({ values, onChange }: { values: BankValues; onChange:
         <TextField
           label="Banco"
           leading={values.bankCode.length === 3 ? <BankLogo code={values.bankCode} name={values.bankName} size={22} /> : undefined}
-          name="bankName"
+          name={`${prefix}bankName`}
           onValueChange={(v) => onChange({ bankName: v })}
           required
           value={values.bankName}
         />
-        <TextField label="Agência" mask="agency" name="bankAgency" onValueChange={(v) => onChange({ bankAgency: v })} placeholder="0000" required value={values.bankAgency} />
-        <TextField label="Conta (com dígito)" mask="account" name="bankAccount" onValueChange={(v) => onChange({ bankAccount: v })} placeholder="12345-6" required value={values.bankAccount} />
+        <TextField label="Agência" mask="agency" name={`${prefix}bankAgency`} onValueChange={(v) => onChange({ bankAgency: v })} placeholder="0000" required value={values.bankAgency} />
+        <TextField label="Conta (com dígito)" mask="account" name={`${prefix}bankAccount`} onValueChange={(v) => onChange({ bankAccount: v })} placeholder="12345-6" required value={values.bankAccount} />
         <label className="field">
           <span className="field-label">Tipo de conta</span>
           <span className="field-control field-select">
-            <select name="bankAccountType" onChange={(e) => onChange({ bankAccountType: e.target.value })} required value={values.bankAccountType}>
+            <select name={`${prefix}bankAccountType`} onChange={(e) => onChange({ bankAccountType: e.target.value })} required value={values.bankAccountType}>
               <option value="">Selecione</option>
               <option value="checking">Conta corrente</option>
               <option value="savings">Conta poupança</option>
@@ -92,7 +93,7 @@ export function BankFields({ values, onChange }: { values: BankValues; onChange:
             <Icon name="chevron" size={16} />
           </span>
         </label>
-        <TextField label="Chave PIX (opcional)" name="pixKey" onValueChange={(v) => onChange({ pixKey: v })} placeholder="CNPJ, e-mail, telefone ou chave aleatória" value={values.pixKey} />
+        <TextField label="Chave PIX (opcional)" name={`${prefix}pixKey`} onValueChange={(v) => onChange({ pixKey: v })} placeholder="CNPJ, e-mail, telefone ou chave aleatória" value={values.pixKey} />
       </div>
     </>
   )

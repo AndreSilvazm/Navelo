@@ -199,13 +199,7 @@ export const collaborators = pgTable(
     district: text("district"),
     city: text("city"),
     state: char("state", { length: 2 }),
-    // dados bancários para pagamentos (conta deve ser do CNPJ)
-    bankCode: char("bank_code", { length: 3 }),
-    bankName: text("bank_name"),
-    bankAgency: text("bank_agency"),
-    bankAccount: text("bank_account"),
-    bankAccountType: bankAccountType("bank_account_type"),
-    pixKey: text("pix_key"),
+    // (os dados bancários não ficam mais aqui: moram na tabela bank_accounts, uma por pessoa e tipo)
     profileCompletedAt: timestamp("profile_completed_at", { withTimezone: true }),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -514,6 +508,33 @@ export type AuditEvent = typeof auditEvents.$inferSelect
 
 export const bankChangeStatus = pgEnum("bank_change_status", ["pending", "approved", "rejected"])
 
+// PJ = conta da empresa do colaborador (obrigatória); PF = conta pessoal (opcional, pode vir depois)
+export const bankAccountKind = pgEnum("bank_account_kind", ["pj", "pf"])
+
+// Contas bancárias da PESSOA, separadas do cadastro do colaborador: valem em todas as empresas dela.
+// Quem escreve aqui é só o servidor (cadastro inicial e pedido aprovado, com o usuário "admin"); o
+// usuário comum do app só lê. Assim ninguém troca a conta de pagamento por um caminho sem análise.
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: bankAccountKind("kind").notNull(),
+    bankCode: char("bank_code", { length: 3 }).notNull(),
+    bankName: text("bank_name").notNull(),
+    bankAgency: text("bank_agency").notNull(),
+    bankAccount: text("bank_account").notNull(),
+    bankAccountType: bankAccountType("bank_account_type").notNull(),
+    pixKey: text("pix_key"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("bank_accounts_user_kind_key").on(t.userId, t.kind)],
+).enableRLS()
+
+export type BankAccount = typeof bankAccounts.$inferSelect
+
 // Troca de conta bancária pedida pelo colaborador. Não entra em vigor sozinha: alguém do
 // corporativo precisa aprovar, porque trocar a conta é o caminho clássico do desvio de pagamento.
 export const bankChangeRequests = pgTable(
@@ -526,6 +547,8 @@ export const bankChangeRequests = pgTable(
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
+    // qual conta o pedido mexe: a da empresa (pj) ou a pessoal (pf)
+    kind: bankAccountKind("kind").notNull().default("pj"),
     // dados pedidos (só valem depois de aprovados)
     bankCode: char("bank_code", { length: 3 }).notNull(),
     bankName: text("bank_name").notNull(),
@@ -540,8 +563,8 @@ export const bankChangeRequests = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // um pedido em análise por vez, por colaborador
-    uniqueIndex("bank_change_pending_key").on(t.collaboratorId).where(sql`${t.status} = 'pending'`),
+    // um pedido em análise por vez, por colaborador e por tipo de conta
+    uniqueIndex("bank_change_pending_key").on(t.collaboratorId, t.kind).where(sql`${t.status} = 'pending'`),
     index("bank_change_company_idx").on(t.companyId, t.status),
   ],
 ).enableRLS()

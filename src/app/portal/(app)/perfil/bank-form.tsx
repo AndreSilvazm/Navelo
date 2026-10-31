@@ -7,10 +7,29 @@ import { cancelBankChange, requestBankChange } from "./actions"
 
 export type PendingBankChange = { values: BankValues; createdAt: string }
 
-export function BankForm({ initial, pending: pendingChange, rejected }: { initial: BankValues; pending: PendingBankChange | null; rejected: { note: string | null; at: string } | null }) {
+const FIELDS = ["bankCode", "bankName", "bankAgency", "bankAccount", "bankAccountType", "pixKey"] as const
+
+// Formulário de uma das contas do perfil: "pj" (da empresa) ou "pf" (pessoa física). Trocar uma conta
+// que já existe, ou cadastrar a conta pessoal depois, passa por análise da empresa.
+export function BankForm({
+  kind,
+  hasAccount,
+  initial,
+  pending: pendingChange,
+  rejected,
+}: {
+  kind: "pj" | "pf"
+  /** já existe uma conta deste tipo em vigor (então o pedido é uma troca) */
+  hasAccount: boolean
+  initial: BankValues
+  pending: PendingBankChange | null
+  rejected: { note: string | null; at: string } | null
+}) {
   const [state, action, pending] = useActionState(requestBankChange, undefined)
   const [values, setValues] = useState<BankValues>(initial)
   const [canceling, setCanceling] = useState(false)
+  // o formulário do PF usa nomes com prefixo, para não bater com os do PJ na mesma página
+  const prefix = kind === "pf" ? "pf_" : ""
 
   // já existe pedido em análise: mostra o que foi pedido e deixa cancelar
   if (pendingChange) {
@@ -18,8 +37,11 @@ export function BankForm({ initial, pending: pendingChange, rejected }: { initia
       <div style={{ display: "grid", gap: 16 }}>
         <div className="mvp-section-heading">
           <div>
-            <strong>Troca em análise</strong>
-            <span>Enviado em {pendingChange.createdAt}. Enquanto a empresa não aprovar, os pagamentos seguem na conta atual.</span>
+            <strong>{hasAccount ? "Troca em análise" : "Cadastro em análise"}</strong>
+            <span>
+              Enviado em {pendingChange.createdAt}.{" "}
+              {hasAccount ? "Enquanto a empresa não aprovar, os pagamentos seguem na conta atual." : "A conta só vale depois que a empresa aprovar."}
+            </span>
           </div>
           <Badge tone="warning">Em análise</Badge>
         </div>
@@ -54,7 +76,7 @@ export function BankForm({ initial, pending: pendingChange, rejected }: { initia
             onClick={() => {
               setCanceling(true)
               startTransition(async () => {
-                await cancelBankChange()
+                await cancelBankChange(kind)
                 setCanceling(false)
               })
             }}
@@ -73,13 +95,15 @@ export function BankForm({ initial, pending: pendingChange, rejected }: { initia
       onSubmit={(e) => {
         e.preventDefault()
         const data = new FormData(e.currentTarget)
+        if (prefix) for (const f of FIELDS) data.set(f, String(data.get(`${prefix}${f}`) ?? ""))
+        data.set("kind", kind)
         startTransition(() => action(data))
       }}
       style={{ display: "grid", gap: 16 }}
     >
       {rejected && (
         <p className="form-alert" role="status">
-          Seu último pedido de troca foi recusado em {rejected.at}
+          Seu último pedido foi recusado em {rejected.at}
           {rejected.note ? `: ${rejected.note}` : "."} Você pode corrigir e enviar de novo.
         </p>
       )}
@@ -93,13 +117,15 @@ export function BankForm({ initial, pending: pendingChange, rejected }: { initia
           {state.success}
         </p>
       )}
-      <BankFields onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))} values={values} />
+      <BankFields onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))} prefix={prefix} values={values} />
       <p className="form-hint">
-        A troca de conta passa por análise da empresa. Até a aprovação, os pagamentos continuam indo para a conta atual.
+        {hasAccount
+          ? "A troca de conta passa por análise da empresa. Até a aprovação, os pagamentos continuam indo para a conta atual."
+          : "O cadastro desta conta passa por análise da empresa antes de valer."}
       </p>
       <div className="portal-form-actions" style={{ marginTop: 0 }}>
         <Button disabled={pending} loading={pending} type="submit">
-          Enviar para análise
+          {hasAccount ? "Enviar troca para análise" : "Enviar para análise"}
         </Button>
       </div>
     </form>

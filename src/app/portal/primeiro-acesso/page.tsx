@@ -1,14 +1,16 @@
 import type { Metadata } from "next"
 import { Badge, Button, Card } from "@/figma/ui"
+import { getBankAccounts, toFormValues } from "@/lib/bank-accounts"
 import { COMPANY_FIELDS, fetchCompanyProfile } from "@/lib/cnpj-lookup"
 import { getDocumentChecklist, requireOnboardingCollaborator } from "@/lib/collaborators"
 import { getPortalCompanies } from "@/lib/portal-companies"
+import { BankStepForm } from "./bank-step-form"
 import { DocumentsForm } from "./documents-form"
 import { ProfileForm } from "./profile-form"
 
 export const metadata: Metadata = { title: "Primeiro acesso" }
 
-const steps = ["Dados da empresa e bancários", "Documentos", "Análise"]
+const steps = ["Dados da empresa", "Dados bancários", "Documentos", "Análise"]
 
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ etapa?: string }> }) {
   const { session, collaborator } = await requireOnboardingCollaborator()
@@ -23,10 +25,13 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
   const suspended = collaborator.status === "suspended"
   // recusado ou suspenso: o colaborador só vê o aviso, sem etapas nem formulários
   const rejected = collaborator.status === "rejected" || suspended
-  const current = collaborator.status === "in_review" ? 2 : editingProfile ? 0 : 1
+  // dados bancários: aparecem logo depois da empresa, e de novo se a conta PJ ainda não foi informada
+  const bank = !rejected && collaborator.status !== "profile_pending" ? await getBankAccounts(session.user.id) : { pj: null, pf: null }
+  const editingBank = !editingProfile && collaborator.status === "documents_pending" && (!bank.pj || etapa === "banco")
+  const current = collaborator.status === "in_review" ? 3 : editingProfile ? 0 : editingBank ? 1 : 2
 
   const checklist =
-    !rejected && current === 1 ? await getDocumentChecklist(collaborator.id, session.company.id) : []
+    !rejected && current === 2 ? await getDocumentChecklist(collaborator.id, session.company.id) : []
 
   // ao reabrir um cadastro já salvo: CNPJ e tudo que a Receita informa ficam travados
   let lockedFields: string[] = []
@@ -47,12 +52,6 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
     district: collaborator.district ?? "",
     city: collaborator.city ?? "",
     state: collaborator.state ?? "",
-    bankCode: collaborator.bankCode ?? "",
-    bankName: collaborator.bankName ?? "",
-    bankAgency: collaborator.bankAgency ?? "",
-    bankAccount: collaborator.bankAccount ?? "",
-    bankAccountType: collaborator.bankAccountType ?? "",
-    pixKey: collaborator.pixKey ?? "",
   }
 
   return (
@@ -131,8 +130,8 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
         <Card className="mvp-settings-card">
           <div className="mvp-section-heading">
             <div>
-              <strong>Dados da sua empresa e dados bancários</strong>
-              <span>Informe os dados do seu CNPJ, como constam na Receita Federal, e a conta para receber os pagamentos.</span>
+              <strong>Dados da sua empresa</strong>
+              <span>Informe os dados do seu CNPJ, como constam na Receita Federal. Os dados bancários vêm na próxima etapa.</span>
             </div>
           </div>
           <ProfileForm
@@ -147,21 +146,38 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
         <Card className="mvp-settings-card">
           <div className="mvp-section-heading">
             <div>
+              <strong>Dados bancários</strong>
+              <span>Para os pagamentos. A conta PJ, da sua empresa, é obrigatória. A conta pessoa física é opcional.</span>
+            </div>
+          </div>
+          <BankStepForm pf={bank.pf ? toFormValues(bank.pf) : null} pj={toFormValues(bank.pj)} submitLabel="Salvar e continuar" />
+        </Card>
+      )}
+
+      {!rejected && current === 2 && (
+        <Card className="mvp-settings-card">
+          <div className="mvp-section-heading">
+            <div>
               <strong>Documentos</strong>
               <span>
                 {companyName} exige os documentos abaixo. Anexe todos e envie de uma vez — o botão libera
                 quando os obrigatórios estiverem anexados.
               </span>
             </div>
-            <Button href="/portal/primeiro-acesso?etapa=dados" variant="ghost">
-              Editar meus dados
-            </Button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Button href="/portal/primeiro-acesso?etapa=dados" variant="ghost">
+                Editar dados da empresa
+              </Button>
+              <Button href="/portal/primeiro-acesso?etapa=banco" variant="ghost">
+                Editar dados bancários
+              </Button>
+            </div>
           </div>
           <DocumentsForm items={checklist} />
         </Card>
       )}
 
-      {!rejected && current === 2 && (
+      {!rejected && current === 3 && (
         <Card className="mvp-settings-card">
           <div className="mvp-section-heading">
             <div>

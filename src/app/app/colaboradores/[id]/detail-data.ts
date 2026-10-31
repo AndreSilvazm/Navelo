@@ -2,6 +2,7 @@ import "server-only"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { bankChangeRequests, collaboratorStatusEvents, collaborators, contracts, invitations, invoices, memberships, reimbursements, users } from "@/db/schema"
+import { getBankAccounts } from "@/lib/bank-accounts"
 import { getDocumentChecklist } from "@/lib/collaborators"
 import type { CollaboratorDetailData } from "./types"
 
@@ -82,6 +83,7 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
     db
       .select({
         id: bankChangeRequests.id,
+        kind: bankChangeRequests.kind,
         bankCode: bankChangeRequests.bankCode,
         bankName: bankChangeRequests.bankName,
         bankAgency: bankChangeRequests.bankAgency,
@@ -91,8 +93,7 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
         createdAt: bankChangeRequests.createdAt,
       })
       .from(bankChangeRequests)
-      .where(and(eq(bankChangeRequests.collaboratorId, id), eq(bankChangeRequests.status, "pending")))
-      .limit(1),
+      .where(and(eq(bankChangeRequests.collaboratorId, id), eq(bankChangeRequests.status, "pending"))),
     // reembolsos do colaborador: alimentam os custos do dashboard
     db
       .select({
@@ -115,28 +116,30 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
   const { c } = row
 
   // convite que originou este cadastro (quem convidou e quando)
-  const [invite] = await db
-    .select({ createdAt: invitations.createdAt, acceptedAt: invitations.acceptedAt, invitedBy: users.name })
-    .from(invitations)
-    .leftJoin(users, eq(users.id, invitations.invitedByUserId))
-    .where(
-      and(
-        eq(invitations.companyId, companyId),
-        eq(invitations.acceptedByUserId, row.userId),
-        eq(invitations.role, "collaborator"),
-      ),
-    )
-    .orderBy(desc(invitations.acceptedAt))
-    .limit(1)
+  const [[invite], accounts] = await Promise.all([
+    db
+        .select({ createdAt: invitations.createdAt, acceptedAt: invitations.acceptedAt, invitedBy: users.name })
+        .from(invitations)
+        .leftJoin(users, eq(users.id, invitations.invitedByUserId))
+        .where(
+          and(
+            eq(invitations.companyId, companyId),
+            eq(invitations.acceptedByUserId, row.userId),
+            eq(invitations.role, "collaborator"),
+          ),
+        )
+        .orderBy(desc(invitations.acceptedAt))
+        .limit(1),
+    getBankAccounts(row.userId),
+  ])
 
   return {
     id: c.id,
     status: c.status,
     // é a própria pessoa que está olhando: ela não decide sobre o próprio cadastro
     isSelf: row.userId === viewerUserId,
-    pendingBankChange: bankPending[0]
-      ? { ...bankPending[0], pixKey: bankPending[0].pixKey, createdAt: bankPending[0].createdAt.toISOString() }
-      : null,
+    pendingBankChanges: bankPending.map((b) => ({ ...b, createdAt: b.createdAt.toISOString() })),
+    bankAccounts: { pj: accounts.pj, pf: accounts.pf },
     name: row.name,
     email: row.email,
     jobTitle: c.jobTitle,
@@ -156,12 +159,6 @@ export async function getCollaboratorDetail(companyId: string, id: string, viewe
     submittedAt: iso(c.submittedAt),
     approvedAt: iso(c.approvedAt),
     approvedBy: row.approvedBy,
-    bankCode: c.bankCode,
-    bankName: c.bankName,
-    bankAgency: c.bankAgency,
-    bankAccount: c.bankAccount,
-    bankAccountType: c.bankAccountType,
-    pixKey: c.pixKey,
     invitedAt: iso(invite?.createdAt ?? null),
     invitedBy: invite?.invitedBy ?? null,
     inviteAcceptedAt: iso(invite?.acceptedAt ?? null),

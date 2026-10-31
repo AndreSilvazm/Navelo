@@ -9,7 +9,7 @@ import { validateBank, normalizeAccount } from "@/lib/bank-validation"
 import { UFS } from "@/lib/br-states"
 import { isValidCnpj, onlyDigits } from "@/lib/cnpj"
 import { COMPANY_FIELDS, fetchCompanyProfile } from "@/lib/cnpj-lookup"
-import { syncBankData } from "@/lib/collaborator-join"
+import { getBankAccounts, removeBankAccount, saveBankAccount } from "@/lib/bank-accounts"
 import { IS_PRODUCTION } from "@/lib/app-env"
 import { describeError } from "@/lib/diagnose"
 import { documentPath, putFile, removeFile, storageEnabled } from "@/lib/storage"
@@ -30,9 +30,9 @@ function isUniqueViolation(e: unknown): boolean {
   return err?.code === "23505" || err?.cause?.code === "23505"
 }
 
-// Etapa 1: dados da empresa do colaborador
+// Etapa 1: dados da empresa do colaborador (os dados bancários são a etapa 2)
 export async function saveProfile(_: ProfileState, formData: FormData): Promise<ProfileState> {
-  const { session, collaborator } = await requireOnboardingCollaborator()
+  const { collaborator } = await requireOnboardingCollaborator()
   if (collaborator.status === "in_review") return { error: "Seus dados estão em análise e não podem ser alterados agora." }
   if (collaborator.status === "rejected") return { error: "Seu acesso foi recusado e o cadastro não pode ser alterado." }
   if (collaborator.status === "suspended") return { error: "Seu acesso está suspenso e o cadastro não pode ser alterado." }
@@ -49,12 +49,6 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
     district: text(formData, "district"),
     city: text(formData, "city"),
     state: text(formData, "state").toUpperCase(),
-    bankCode: text(formData, "bankCode"),
-    bankName: text(formData, "bankName"),
-    bankAgency: text(formData, "bankAgency"),
-    bankAccount: text(formData, "bankAccount"),
-    bankAccountType: text(formData, "bankAccountType"),
-    pixKey: text(formData, "pixKey"),
   }
   const fail = (error: string): ProfileState => ({ error, values })
 
@@ -82,10 +76,6 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
   if (!values.street || !values.number || !values.district || !values.city) return fail("Preencha o endereço completo.")
   if (!(UFS as readonly string[]).includes(values.state)) return fail("Escolha o estado.")
 
-  // dados bancários: a conta é da empresa (CNPJ), para pagamentos
-  const bankError = validateBank(values as Parameters<typeof validateBank>[0])
-  if (bankError) return fail(bankError)
-
   try {
     await db
       .update(collaborators)
@@ -101,12 +91,6 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
         district: values.district,
         city: values.city,
         state: values.state,
-        bankCode: values.bankCode,
-        bankName: values.bankName.slice(0, 120),
-        bankAgency: values.bankAgency,
-        bankAccount: normalizeAccount(values.bankAccount),
-        bankAccountType: values.bankAccountType as "checking" | "savings", // já validado por validateBank
-        pixKey: values.pixKey || null,
         profileCompletedAt: new Date(),
         // avança só na primeira vez; quem já está enviando documentos permanece onde está
         status: collaborator.status === "profile_pending" ? "documents_pending" : collaborator.status,
@@ -117,15 +101,51 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
     throw e
   }
 
-  // a conta bancária é única da pessoa: vale em todas as empresas dela
-  await syncBankData(session.user.id, {
-    bankCode: values.bankCode,
-    bankName: values.bankName.slice(0, 120),
-    bankAgency: values.bankAgency,
-    bankAccount: normalizeAccount(values.bankAccount),
-    bankAccountType: values.bankAccountType as "checking" | "savings",
-    pixKey: values.pixKey || null,
+  revalidatePath("/portal/primeiro-acesso")
+  redirect("/portal/primeiro-acesso")
+}
+
+// Etapa 2: dados bancários. A conta PJ (da empresa) é obrigatória; a conta pessoa física é opcional e,
+// quem não quiser agora, pode informar depois pelo perfil. As contas moram na tabela bank_accounts
+// (uma por pessoa e tipo) e valem em todas as empresas dela.
+export type BankStepState = { error?: string; values?: Record<string, string> } | undefined
+
+const BANK_FIELDS = ["bankCode", "bankName", "bankAgency", "bankAccount", "bankAccountType", "pixKey"] as const
+
+function readBank(formData: FormData, prefix: string) {
+  return Object.fromEntries(BANK_FIELDS.map((k) => [k, text(formData, `${prefix}${k}`)])) as Record<(typeof BANK_FIELDS)[number], string>
+}
+
+export async function saveBankStep(_: BankStepState, formData: FormData): Promise<BankStepState> {
+  const { session, collaborator } = await requireOnboardingCollaborator()
+  if (collaborator.status !== "documents_pending") return { error: "Esta etapa não está disponível agora." }
+
+  const pj = readBank(formData, "")
+  const withPf = formData.get("pfEnabled") === "on"
+  const pf = readBank(formData, "pf_")
+  const values: Record<string, string> = { ...pj, pfEnabled: withPf ? "on" : "", ...Object.fromEntries(BANK_FIELDS.map((k) => [`pf_${k}`, pf[k]])) }
+  const fail = (error: string): BankStepState => ({ error, values })
+
+  // a conta da empresa é obrigatória
+  const pjError = validateBank(pj)
+  if (pjError) return fail(`Conta PJ: ${pjError}`)
+  // a conta pessoal só é validada se a pessoa quis informá-la
+  if (withPf) {
+    const pfError = validateBank(pf)
+    if (pfError) return fail(`Conta pessoa física: ${pfError}`)
+  }
+
+  const asData = (v: typeof pj) => ({
+    bankCode: v.bankCode,
+    bankName: v.bankName.slice(0, 120),
+    bankAgency: v.bankAgency,
+    bankAccount: normalizeAccount(v.bankAccount),
+    bankAccountType: v.bankAccountType as "checking" | "savings", // já validado por validateBank
+    pixKey: v.pixKey || null,
   })
+  await saveBankAccount(session.user.id, "pj", asData(pj))
+  if (withPf) await saveBankAccount(session.user.id, "pf", asData(pf))
+  else await removeBankAccount(session.user.id, "pf") // desmarcou: nada de conta pessoal guardada
 
   revalidatePath("/portal/primeiro-acesso")
   redirect("/portal/primeiro-acesso")
@@ -137,6 +157,8 @@ const MAX_TOTAL_BYTES = 25 * 1024 * 1024
 export async function submitDocuments(_: FormState, formData: FormData): Promise<FormState> {
   const { session, collaborator } = await requireOnboardingCollaborator()
   if (collaborator.status !== "documents_pending") return { error: "O envio de documentos não está disponível agora." }
+  // a etapa dos dados bancários vem antes: sem a conta PJ não há como enviar para análise
+  if (!(await getBankAccounts(session.user.id)).pj) return { error: "Informe primeiro os dados bancários (etapa 2)." }
 
   const checklist = await getDocumentChecklist(collaborator.id, session.company.id)
 

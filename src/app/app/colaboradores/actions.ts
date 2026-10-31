@@ -7,7 +7,7 @@ import { bankChangeRequests, collaboratorDocuments, collaboratorStatusEvents, co
 import { requireSession } from "@/lib/auth/session"
 import { auditFromSession, bankSnapshot, type AuditAction } from "@/lib/audit"
 import { SELF_REVIEW_ERROR, isOwnCollaboratorRecord, isOwnInvoice } from "@/lib/auth/self-review"
-import { syncBankData } from "@/lib/collaborator-join"
+import { KIND_LABEL, getBankAccounts, saveBankAccount } from "@/lib/bank-accounts"
 import {
   bankFacts,
   sendBankChangeApprovedEmail,
@@ -378,7 +378,8 @@ async function findBankRequest(requestId: string, companyId: string) {
   return row
 }
 
-// Aprovar aplica a conta nova. Como a conta é única da pessoa, vale em todas as empresas dela.
+// Aprovar aplica a conta pedida (PJ ou pessoa física) em bank_accounts. A conta é da pessoa: vale em todas
+// as empresas dela.
 export async function approveBankChange(requestId: string): Promise<void> {
   const session = await requireSession("corporate")
   const pedido = await findBankRequest(requestId, session.company.id)
@@ -392,14 +393,15 @@ export async function approveBankChange(requestId: string): Promise<void> {
     .where(eq(collaborators.id, pedido.collaboratorId))
   if (!vinculo) return
 
-  const [anterior] = await db.select().from(collaborators).where(eq(collaborators.id, pedido.collaboratorId))
+  const [colaborador] = await db.select({ legalName: collaborators.legalName }).from(collaborators).where(eq(collaborators.id, pedido.collaboratorId))
+  const anterior = (await getBankAccounts(vinculo.userId))[pedido.kind]
 
   await db
     .update(bankChangeRequests)
     .set({ status: "approved", reviewedAt: new Date(), reviewedByUserId: session.user.id })
     .where(and(eq(bankChangeRequests.id, pedido.id), eq(bankChangeRequests.status, "pending")))
 
-  await syncBankData(vinculo.userId, {
+  await saveBankAccount(vinculo.userId, pedido.kind, {
     bankCode: pedido.bankCode,
     bankName: pedido.bankName,
     bankAgency: pedido.bankAgency,
@@ -412,17 +414,18 @@ export async function approveBankChange(requestId: string): Promise<void> {
     action: "bank_change.approved",
     targetType: "bank_change",
     targetId: pedido.id,
-    targetLabel: anterior?.legalName ?? null,
+    targetLabel: colaborador?.legalName ?? null,
     details: {
       colaboradorId: pedido.collaboratorId,
-      de: bankSnapshot(anterior ?? {}),
+      tipo: KIND_LABEL[pedido.kind],
+      de: anterior ? bankSnapshot(anterior) : null,
       para: bankSnapshot(pedido),
       valeEmTodasAsEmpresasDaPessoa: true,
     },
   })
 
   const contato = await collaboratorContact(pedido.collaboratorId)
-  if (contato) await sendBankChangeApprovedEmail({ ...contato, conta: bankFacts(bankSnapshot(pedido)) })
+  if (contato) await sendBankChangeApprovedEmail({ ...contato, tipo: KIND_LABEL[pedido.kind].toLowerCase(), conta: bankFacts(bankSnapshot(pedido)) })
   refresh()
   revalidatePath("/portal/perfil")
 }
@@ -445,11 +448,11 @@ export async function rejectBankChange(requestId: string, formData: FormData): P
     action: "bank_change.rejected",
     targetType: "bank_change",
     targetId: pedido.id,
-    details: { colaboradorId: pedido.collaboratorId, motivo: reason, recusado: bankSnapshot(pedido) },
+    details: { colaboradorId: pedido.collaboratorId, tipo: KIND_LABEL[pedido.kind], motivo: reason, recusado: bankSnapshot(pedido) },
   })
 
   const contato = await collaboratorContact(pedido.collaboratorId)
-  if (contato) await sendBankChangeRejectedEmail({ ...contato, motivo: reason })
+  if (contato) await sendBankChangeRejectedEmail({ ...contato, tipo: KIND_LABEL[pedido.kind].toLowerCase(), motivo: reason })
   refresh()
   revalidatePath("/portal/perfil")
 }

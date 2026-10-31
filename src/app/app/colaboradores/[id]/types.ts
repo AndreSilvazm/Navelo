@@ -19,6 +19,15 @@ export type ChecklistItemDTO = {
   } | null
 }
 
+export type BankAccountDTO = {
+  bankCode: string
+  bankName: string
+  bankAgency: string
+  bankAccount: string
+  bankAccountType: "checking" | "savings"
+  pixKey: string | null
+}
+
 export type CollaboratorDetailData = {
   id: string
   status: CollaboratorStatus
@@ -43,23 +52,10 @@ export type CollaboratorDetailData = {
   submittedAt: string | null
   approvedAt: string | null
   approvedBy: string | null
-  bankCode: string | null
-  bankName: string | null
-  bankAgency: string | null
-  bankAccount: string | null
-  bankAccountType: "checking" | "savings" | null
-  /** troca de conta esperando decisão do corporativo */
-  pendingBankChange: {
-    id: string
-    bankCode: string
-    bankName: string
-    bankAgency: string
-    bankAccount: string
-    bankAccountType: "checking" | "savings"
-    pixKey: string | null
-    createdAt: string
-  } | null
-  pixKey: string | null
+  /** contas bancárias da pessoa: PJ (da empresa) e PF (opcional), de bank_accounts */
+  bankAccounts: { pj: BankAccountDTO | null; pf: BankAccountDTO | null }
+  /** pedidos de conta (troca ou cadastro) esperando decisão do corporativo: no máximo um por tipo */
+  pendingBankChanges: (BankAccountDTO & { id: string; kind: "pj" | "pf"; createdAt: string })[]
   invitedAt: string | null
   invitedBy: string | null
   inviteAcceptedAt: string | null

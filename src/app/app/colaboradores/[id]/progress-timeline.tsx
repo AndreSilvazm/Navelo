@@ -51,12 +51,22 @@ function buildSteps(d: CollaboratorDetailData): Step[] {
     },
     {
       key: "profile",
-      title: "Dados da empresa e bancários",
+      title: "Dados da empresa",
       state: d.profileCompletedAt ? "done" : d.status === "profile_pending" ? "current" : "pending",
       date: d.profileCompletedAt,
       body: d.profileCompletedAt
-        ? `${d.legalName ?? "Empresa"}${d.cnpj ? ` · CNPJ ${formatCnpj(d.cnpj)}` : ""} informada${d.bankName ? `, com conta no ${d.bankName}` : ""}.`
-        : "Aguardando o colaborador preencher o CNPJ, o endereço e a conta bancária para pagamentos.",
+        ? `${d.legalName ?? "Empresa"}${d.cnpj ? ` · CNPJ ${formatCnpj(d.cnpj)}` : ""} informada.`
+        : "Aguardando o colaborador preencher o CNPJ e o endereço.",
+    },
+    {
+      key: "bank",
+      title: "Dados bancários",
+      // a conta PJ é a obrigatória; a pessoa física é opcional
+      state: d.bankAccounts.pj ? "done" : d.status === "documents_pending" ? "current" : "pending",
+      date: null,
+      body: d.bankAccounts.pj
+        ? `Conta PJ no ${d.bankAccounts.pj.bankName}${d.bankAccounts.pf ? `; conta pessoa física no ${d.bankAccounts.pf.bankName}` : "; sem conta pessoa física"}.`
+        : "Aguardando o colaborador informar a conta PJ (da empresa) para os pagamentos.",
     },
     {
       key: "documents",

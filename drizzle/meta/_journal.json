@@ -162,6 +162,13 @@
       "when": 1793419522769,
       "tag": "0022_contrato_por_colaborador_e_reembolsos",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793427868272,
+      "tag": "0023_contas_bancarias_pj_pf",
+      "breakpoints": true
     }
   ]
 }

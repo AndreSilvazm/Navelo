@@ -1,12 +1,13 @@
 import "server-only"
-import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm"
+import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm"
 import { dbAdmin as db } from "@/db/admin"
 import { collaborators, memberships } from "@/db/schema"
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-// Campos que seguem a pessoa de uma empresa para outra: dados do CNPJ dela e a conta bancária
-// (única por pessoa). O que é de cada empresa (documentos, contratos, notas) não é copiado.
+// Campos que seguem a pessoa de uma empresa para outra: os dados do CNPJ dela. (As contas bancárias
+// moram na tabela bank_accounts, por pessoa, e já valem em todas as empresas sem precisar copiar.)
+// O que é de cada empresa (documentos, contratos, notas) não é copiado.
 export const PERSON_FIELDS = [
   "legalName",
   "tradeName",
@@ -19,12 +20,6 @@ export const PERSON_FIELDS = [
   "district",
   "city",
   "state",
-  "bankCode",
-  "bankName",
-  "bankAgency",
-  "bankAccount",
-  "bankAccountType",
-  "pixKey",
 ] as const
 
 // Vincula a pessoa à empresa como colaborador. Quem já tem cadastro em outra empresa entra direto
@@ -75,16 +70,4 @@ export async function joinAsCollaborator(tx: Tx, input: { userId: string; compan
 
   await tx.insert(collaborators).values({ membershipId: membership.id, companyId, jobTitle, ...copy })
   return { membershipId: membership.id, copied: !!copy.profileCompletedAt }
-}
-
-// A conta bancária é única da pessoa: mudou em uma empresa, vale em todas.
-export async function syncBankData(userId: string, bank: Partial<typeof collaborators.$inferInsert>) {
-  const mine = await db.select({ id: memberships.id }).from(memberships).where(eq(memberships.userId, userId))
-  if (mine.length === 0) return
-  await db.update(collaborators).set(bank).where(
-    inArray(
-      collaborators.membershipId,
-      mine.map((m) => m.id),
-    ),
-  )
 }

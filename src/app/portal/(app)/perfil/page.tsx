@@ -7,6 +7,7 @@ import { Avatar, Badge, Card, PageHeading } from "@/figma/ui"
 import { getDocumentChecklist, requireActiveCollaborator } from "@/lib/collaborators"
 import { formatCnpj, onlyDigits } from "@/lib/cnpj"
 import { initialsOf } from "@/lib/initials"
+import { getBankAccounts, toFormValues, type BankKind } from "@/lib/bank-accounts"
 import { BankForm } from "./bank-form"
 
 export const metadata: Metadata = { title: "Meu perfil" }
@@ -25,15 +26,16 @@ const data = (d: Date) => d.toLocaleDateString("pt-BR")
 export default async function PortalProfilePage() {
   const { session, collaborator: c } = await requireActiveCollaborator()
 
-  // pedido de troca bancária: em análise, ou o último recusado (para a pessoa corrigir)
-  const [pedido] = await db
-    .select()
-    .from(bankChangeRequests)
-    .where(and(eq(bankChangeRequests.collaboratorId, c.id), inArray(bankChangeRequests.status, ["pending", "rejected"])))
-    .orderBy(desc(bankChangeRequests.createdAt))
-    .limit(1)
-  const emAnalise = pedido?.status === "pending" ? pedido : null
-  const recusado = pedido?.status === "rejected" ? pedido : null
+  // contas bancárias (PJ e PF) e, de cada uma, o pedido em análise ou o último recusado (para corrigir)
+  const [accounts, pedidos] = await Promise.all([
+    getBankAccounts(session.user.id),
+    db
+      .select()
+      .from(bankChangeRequests)
+      .where(and(eq(bankChangeRequests.collaboratorId, c.id), inArray(bankChangeRequests.status, ["pending", "rejected"])))
+      .orderBy(desc(bankChangeRequests.createdAt)),
+  ])
+  const pedidoDe = (kind: BankKind) => pedidos.find((p) => p.kind === kind)
   const company = session.company.tradeName ?? session.company.legalName
 
   // resumo dos documentos enviados (os documentos moram dentro do perfil)
@@ -108,40 +110,50 @@ export default async function PortalProfilePage() {
           </dl>
         </Card>
 
-        <Card className="mvp-settings-card">
-          <div className="mvp-section-heading">
-            <div>
-              <strong>Dados bancários</strong>
-              <span>Para os pagamentos. A conta precisa ser da sua empresa (mesmo CNPJ). Trocar a conta passa por análise da empresa.</span>
-            </div>
-          </div>
-          <BankForm
-            pending={
-              emAnalise
-                ? {
-                    createdAt: data(emAnalise.createdAt),
-                    values: {
-                      bankCode: emAnalise.bankCode,
-                      bankName: emAnalise.bankName,
-                      bankAgency: emAnalise.bankAgency,
-                      bankAccount: emAnalise.bankAccount,
-                      bankAccountType: emAnalise.bankAccountType,
-                      pixKey: emAnalise.pixKey ?? "",
-                    },
-                  }
-                : null
-            }
-            rejected={recusado?.reviewedAt ? { note: recusado.reviewNote, at: data(recusado.reviewedAt) } : null}
-            initial={{
-              bankCode: c.bankCode ?? "",
-              bankName: c.bankName ?? "",
-              bankAgency: c.bankAgency ?? "",
-              bankAccount: c.bankAccount ?? "",
-              bankAccountType: c.bankAccountType ?? "",
-              pixKey: c.pixKey ?? "",
-            }}
-          />
-        </Card>
+        {(["pj", "pf"] as const).map((kind) => {
+          const pedido = pedidoDe(kind)
+          const emAnalise = pedido?.status === "pending" ? pedido : null
+          const recusado = pedido?.status === "rejected" ? pedido : null
+          const conta = accounts[kind]
+          return (
+            <Card className="mvp-settings-card" key={kind}>
+              <div className="mvp-section-heading">
+                <div>
+                  <strong>{kind === "pj" ? "Conta PJ (da sua empresa)" : "Conta pessoa física (opcional)"}</strong>
+                  <span>
+                    {kind === "pj"
+                      ? "Para os pagamentos. A conta precisa ser da sua empresa (mesmo CNPJ). Trocar a conta passa por análise da empresa."
+                      : conta
+                        ? "Sua conta pessoal. Trocar a conta passa por análise da empresa."
+                        : "Você pode informar uma conta pessoal quando quiser. O cadastro passa por análise da empresa."}
+                  </span>
+                </div>
+                {conta ? <Badge tone="success">Cadastrada</Badge> : <Badge tone="neutral">Não informada</Badge>}
+              </div>
+              <BankForm
+                hasAccount={!!conta}
+                initial={toFormValues(conta)}
+                kind={kind}
+                pending={
+                  emAnalise
+                    ? {
+                        createdAt: data(emAnalise.createdAt),
+                        values: {
+                          bankCode: emAnalise.bankCode,
+                          bankName: emAnalise.bankName,
+                          bankAgency: emAnalise.bankAgency,
+                          bankAccount: emAnalise.bankAccount,
+                          bankAccountType: emAnalise.bankAccountType,
+                          pixKey: emAnalise.pixKey ?? "",
+                        },
+                      }
+                    : null
+                }
+                rejected={recusado?.reviewedAt ? { note: recusado.reviewNote, at: data(recusado.reviewedAt) } : null}
+              />
+            </Card>
+          )
+        })}
       </div>
     </>
   )
