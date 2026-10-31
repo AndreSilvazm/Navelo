@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
-import { and, count, eq, ne } from "drizzle-orm"
+import Link from "next/link"
+import { and, count, eq, isNull, ne } from "drizzle-orm"
 import { db } from "@/db"
-import { collaborators, contracts, memberships } from "@/db/schema"
+import { collaborators, contracts, documentRequirements, memberships } from "@/db/schema"
 import { Badge, Card, PageHeading } from "@/figma/ui"
 import { listAccesses } from "@/lib/auth/accesses"
 import { ROLE_LABELS } from "@/lib/auth/permissions"
@@ -22,11 +23,19 @@ function Field({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
-export default async function SettingsPage() {
-  const session = await requireSession("corporate")
-  const companyId = session.company.id
+const TABS = [
+  { id: "geral", label: "Geral" },
+  { id: "documentos", label: "Documentos exigidos" },
+  { id: "equipe", label: "Equipe" },
+] as const
+type TabId = (typeof TABS)[number]["id"]
 
-  const [accesses, [people], [team], [activeContracts]] = await Promise.all([
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ aba?: string }> }) {
+  const [session, { aba }] = await Promise.all([requireSession("corporate"), searchParams])
+  const companyId = session.company.id
+  const tab: TabId = TABS.find((t) => t.id === aba)?.id ?? "geral"
+
+  const [accesses, [people], [team], [activeContracts], [docs]] = await Promise.all([
     listAccesses(session.user.id),
     db.select({ n: count() }).from(collaborators).where(eq(collaborators.companyId, companyId)),
     db
@@ -34,6 +43,7 @@ export default async function SettingsPage() {
       .from(memberships)
       .where(and(eq(memberships.companyId, companyId), eq(memberships.status, "active"), ne(memberships.role, "collaborator"))),
     db.select({ n: count() }).from(contracts).where(and(eq(contracts.companyId, companyId), eq(contracts.status, "active"))),
+    db.select({ n: count() }).from(documentRequirements).where(and(eq(documentRequirements.companyId, companyId), isNull(documentRequirements.archivedAt))),
   ])
 
   const canEdit = session.role === "owner" || session.role === "admin"
@@ -43,6 +53,17 @@ export default async function SettingsPage() {
     <>
       <PageHeading subtitle="Dados da empresa, sua conta, documentos exigidos e equipe." title="Configurações" />
 
+      <nav aria-label="Seções das configurações" className="page-tabs">
+        {TABS.map((t) => (
+          <Link aria-current={tab === t.id ? "page" : undefined} href={t.id === "geral" ? "/app/configuracoes" : `/app/configuracoes?aba=${t.id}`} key={t.id}>
+            {t.label}
+            {t.id === "documentos" && <span className="page-tab-count">{docs.n}</span>}
+            {t.id === "equipe" && <span className="page-tab-count">{team.n}</span>}
+          </Link>
+        ))}
+      </nav>
+
+      {tab === "geral" && (
       <div className="mvp-settings-grid">
         <Card className="mvp-settings-card">
           <div className="mvp-section-heading">
@@ -85,9 +106,10 @@ export default async function SettingsPage() {
           )}
         </Card>
       </div>
+      )}
 
-      <RequirementsSection />
-      <TeamSection />
+      {tab === "documentos" && <RequirementsSection />}
+      {tab === "equipe" && <TeamSection />}
     </>
   )
 }

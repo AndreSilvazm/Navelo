@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
-import { BankLogo } from "@/components/bank-logo"
+import { BankAccountFields } from "@/components/bank-account-fields"
 import { Avatar, Badge, Button, Card, Icon } from "@/figma/ui"
 import { ReasonDialog } from "@/components/reason-dialog"
 import { formatCnpj, onlyDigits } from "@/lib/cnpj"
@@ -18,7 +18,7 @@ import { InvoicesTab } from "./invoices-tab"
 import { ProgressTimeline } from "./progress-timeline"
 import { ReimbursementsTab } from "./reimbursements-tab"
 import { KIND_LABEL } from "@/lib/bank-labels"
-import { detailQueryKey, isReadyForApproval, type BankAccountDTO, type CollaboratorDetailData } from "./types"
+import { detailQueryKey, isReadyForApproval, type CollaboratorDetailData } from "./types"
 
 export type DetailTab = "andamento" | "dashboard" | "geral" | "documentos" | "bancarios" | "notas" | "reembolsos"
 
@@ -318,7 +318,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
                     </div>
                     <Badge tone="warning">Em análise</Badge>
                   </div>
-                  <AccountFields account={req} label="Banco pedido" />
+                  <BankAccountFields account={req} label="Banco pedido" />
                   {canDecide ? (
                     <div className="portal-form-actions" style={{ marginTop: 16 }}>
                       <Button disabled={approveBank.isPending || rejectBank.isPending} onClick={() => setRejectingBank(req.id)} variant="secondary">
@@ -352,7 +352,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
               {data.bankAccounts.pj ? <Badge tone="success">Cadastrada</Badge> : <Badge tone="neutral">Não informada</Badge>}
             </div>
             {data.bankAccounts.pj ? (
-              <AccountFields account={data.bankAccounts.pj} holder={data.legalName} holderDoc={data.cnpj ? formatCnpj(data.cnpj) : null} holderDocLabel="CNPJ do titular" label="Banco" />
+              <BankAccountFields account={data.bankAccounts.pj} holder={data.legalName} holderDoc={data.cnpj ? formatCnpj(data.cnpj) : null} holderDocLabel="CNPJ do titular" label="Banco" />
             ) : (
               <p className="form-hint">O colaborador ainda não informou a conta da empresa.</p>
             )}
@@ -367,7 +367,7 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
               {data.bankAccounts.pf ? <Badge tone="success">Cadastrada</Badge> : <Badge tone="neutral">Não informada</Badge>}
             </div>
             {data.bankAccounts.pf ? (
-              <AccountFields account={data.bankAccounts.pf} holder={data.name} label="Banco" />
+              <BankAccountFields account={data.bankAccounts.pf} holder={data.name} label="Banco" />
             ) : (
               <p className="form-hint">O colaborador não informou uma conta pessoa física.</p>
             )}
@@ -377,43 +377,5 @@ export function CollaboratorDetail({ data: initial, tab: initialTab }: { data: C
 
       {activeTab === "notas" && invoicesEnabled && <InvoicesTab data={data} />}
     </>
-  )
-}
-
-// Os campos de uma conta bancária (a que está em vigor ou a que foi pedida)
-function AccountFields({
-  account,
-  label,
-  holder,
-  holderDoc,
-  holderDocLabel,
-}: {
-  account: BankAccountDTO
-  label: string
-  holder?: string | null
-  holderDoc?: string | null
-  holderDocLabel?: string
-}) {
-  return (
-    <dl className="info-grid">
-      <div className="info-field">
-        <dt>{label}</dt>
-        <dd className="bank-line">
-          <BankLogo code={account.bankCode} name={account.bankName} size={32} />
-          <span>
-            {account.bankCode} · {account.bankName}
-          </span>
-        </dd>
-      </div>
-      <Field label="Tipo de conta" value={account.bankAccountType === "savings" ? "Conta poupança" : "Conta corrente"} />
-      <Field label="Agência" value={account.bankAgency} />
-      <Field label="Conta" value={account.bankAccount} />
-      {holder !== undefined && <Field label="Titular" value={holder} />}
-      {holderDocLabel && <Field label={holderDocLabel} value={holderDoc} />}
-      <div className="info-field info-wide">
-        <dt>Chave PIX</dt>
-        <dd>{account.pixKey || "Não informada"}</dd>
-      </div>
-    </dl>
   )
 }

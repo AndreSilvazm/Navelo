@@ -3,9 +3,12 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { and, desc, eq, ne, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { collaborators, contracts, invoices, memberships, users } from "@/db/schema"
+import { bankChangeRequests, collaborators, contracts, invoices, memberships, users } from "@/db/schema"
 import { Badge, Card, Icon } from "@/figma/ui"
+import { BankAccountFields } from "@/components/bank-account-fields"
 import { DocumentViewer } from "@/components/document-viewer"
+import { getBankAccounts } from "@/lib/bank-accounts"
+import { KIND_LABEL } from "@/lib/bank-labels"
 import { requireSession } from "@/lib/auth/session"
 import { formatCnpj } from "@/lib/cnpj"
 import { formatBRL, formatDate } from "@/lib/format"
@@ -68,6 +71,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   if (!row) notFound()
 
   // outra nota do mesmo colaborador na mesma competência (mês): vale conferir
+  // contas bancárias do colaborador (para quem aprova ver para onde vai o pagamento) e pedidos de troca em análise
+  const [accounts, pendingBank] = await Promise.all([
+    getBankAccounts(row.collaboratorUserId),
+    db
+      .select({ kind: bankChangeRequests.kind })
+      .from(bankChangeRequests)
+      .where(and(eq(bankChangeRequests.collaboratorId, row.collaboratorId), eq(bankChangeRequests.status, "pending"))),
+  ])
+
   const sameMonth = await db
     .select({ id: invoices.id, number: invoices.number, status: invoices.status })
     .from(invoices)
@@ -161,6 +173,51 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               </span>
             </div>
           )}
+
+          <Card className="mvp-settings-card">
+            <div className="mvp-section-heading">
+              <div>
+                <strong>Dados bancários para o pagamento</strong>
+                <span>A conta do colaborador, para conferir antes de aprovar e pagar.</span>
+              </div>
+              <Link className="doc-review-next" href={`/app/colaboradores/${row.collaboratorId}?aba=bancarios`}>
+                Ver no cadastro →
+              </Link>
+            </div>
+
+            {pendingBank.length > 0 && (
+              <div className="nf-check warn" style={{ marginBottom: 16 }}>
+                <strong>Pedido de conta bancária em análise</strong>
+                <span>
+                  O colaborador pediu {pendingBank.length === 1 ? "uma troca ou cadastro" : "trocas ou cadastros"} ({pendingBank.map((p) => KIND_LABEL[p.kind].toLowerCase()).join(" e ")}).
+                  Decida o pedido antes de pagar, para o valor ir para a conta certa.
+                </span>
+                <Link href={`/app/colaboradores/${row.collaboratorId}?aba=bancarios`}>Analisar o pedido →</Link>
+              </div>
+            )}
+
+            {accounts.pj || accounts.pf ? (
+              <div style={{ display: "grid", gap: 20 }}>
+                {accounts.pj && (
+                  <section style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <strong>{KIND_LABEL.pj}</strong>
+                      <Badge tone="success">Principal</Badge>
+                    </div>
+                    <BankAccountFields account={accounts.pj} holder={row.legalName} holderDoc={row.cnpj ? formatCnpj(row.cnpj) : null} holderDocLabel="CNPJ do titular" />
+                  </section>
+                )}
+                {accounts.pf && (
+                  <section style={{ display: "grid", gap: 10 }}>
+                    <strong>{KIND_LABEL.pf}</strong>
+                    <BankAccountFields account={accounts.pf} holder={row.collaborator} />
+                  </section>
+                )}
+              </div>
+            ) : (
+              <p className="form-hint">O colaborador ainda não informou dados bancários.</p>
+            )}
+          </Card>
 
           <Card className="mvp-settings-card">
             <div className="mvp-section-heading">
