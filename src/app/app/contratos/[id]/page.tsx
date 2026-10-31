@@ -11,9 +11,10 @@ import { CORPORATE_ROLES, requireSession } from "@/lib/auth/session"
 
 import { formatBRL, formatDate, formatInvoiceDue } from "@/lib/format"
 import { statusLabel, statusTone } from "../../colaboradores/types"
-import { deleteContractFile, removeContractRequirement } from "../actions"
+import { removeContractRequirement } from "../actions"
 import { collaboratorOption } from "../options"
 import { contractStatusOf } from "../status"
+import { ContractFiles } from "./contract-files"
 import { EditContractForm } from "./edit-form"
 import { EndContractButton } from "./end-contract-button"
 import { ContractFileForm } from "./file-form"
@@ -246,57 +247,35 @@ export default async function ContractPage({
       )}
 
       {tab === "arquivos" && (
-        <div className="mvp-settings-grid">
-          <Card className="mvp-settings-card">
-            <div className="mvp-section-heading">
-              <div>
-                <strong>Arquivos anexados</strong>
-                <span>Documentos deste contrato. Só o corporativo vê e anexa.</span>
-              </div>
-            </div>
-            {files.length === 0 ? (
-              <p className="form-hint">Nenhum arquivo anexado ainda.</p>
-            ) : (
-              <div style={{ display: "grid", gap: 12 }}>
-                {files.map((f) => (
-                  <div key={f.id} style={rowStyle}>
-                    <div style={{ minWidth: 0 }}>
-                      <a href={`/api/contratos/${id}/arquivos/${f.id}`} rel="noreferrer" target="_blank">
-                        <strong>{f.title}</strong>
-                      </a>
-                      <div className="form-hint">
-                        {f.fileName} · {size(f.sizeBytes)} · anexado em {when(f.createdAt)} por {f.by ?? "usuário removido"}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <a className="doc-review-next" href={`/api/contratos/${id}/arquivos/${f.id}?download=1`}>
-                        Baixar
-                      </a>
-                      {canEdit && (
-                        <form action={deleteContractFile.bind(null, id, f.id)}>
-                          <Button type="submit" variant="ghost">
-                            Remover
-                          </Button>
-                        </form>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+        <ContractFiles
+          canEdit={canEdit}
+          contractId={id}
+          files={[...files]
+            // o documento principal (contrato de adesão) vem primeiro
+            .sort((x, y) => Number(y.title === "Contrato de adesão") - Number(x.title === "Contrato de adesão"))
+            .map((f) => ({
+              id: f.id,
+              title: f.title,
+              fileName: f.fileName,
+              mimeType: f.mimeType,
+              size: size(f.sizeBytes),
+              when: when(f.createdAt),
+              by: f.by,
+              principal: f.title === "Contrato de adesão",
+            }))}
+        >
           {canEdit && (
             <Card className="mvp-settings-card">
               <div className="mvp-section-heading">
                 <div>
                   <strong>Anexar documento</strong>
-                  <span>Contrato assinado, aditivos e outros documentos deste contrato.</span>
+                  <span>Aditivos, anexos e outros documentos específicos deste contrato. PDF, PNG ou JPG, até 5 MB.</span>
                 </div>
               </div>
               <ContractFileForm contractId={id} />
             </Card>
           )}
-        </div>
+        </ContractFiles>
       )}
 
       {tab === "documentos" && (
